@@ -1,72 +1,110 @@
 """
 Stock Analysis Engine
+
+Coordinates:
+1. Signal Pipeline
+2. Score Engine
+3. StockAnalysis Model
 """
 
 import pandas as pd
+
+from src.models.stock_analysis import StockAnalysis
+from src.scoring.score_engine import ScoreEngine
+from src.signals.pipeline import SignalPipeline
 
 
 class StockAnalyzer:
 
     @staticmethod
-    def analyze(symbol: str, df: pd.DataFrame):
+    def analyze(symbol: str, df: pd.DataFrame) -> StockAnalysis:
 
         latest = df.iloc[-1]
 
+        # ---------------------------------------------------------
+        # Generate Signals
+        # ---------------------------------------------------------
+
+        signals = SignalPipeline.run(df)
+
+        trend_signal = next(
+            signal for signal in signals
+            if signal.name == "Trend"
+        )
+
+        momentum_signal = next(
+            signal for signal in signals
+            if signal.name == "Momentum"
+        )
+
+        # ---------------------------------------------------------
+        # Score
+        # ---------------------------------------------------------
+
+        score = ScoreEngine.calculate(signals)
+
+        # ---------------------------------------------------------
+        # Basic Market Data
+        # ---------------------------------------------------------
+
         close = float(latest["Close"])
+
         ema20 = float(latest["EMA20"])
         ema50 = float(latest["EMA50"])
         ema200 = float(latest["EMA200"])
+
         rsi = float(latest["RSI"])
 
-        above20 = close > ema20
-        above50 = close > ema50
-        above200 = close > ema200
+        macd = float(latest["MACD"])
+        macd_signal_line = float(latest["MACD_SIGNAL"])
+        macd_histogram = float(latest["MACD_HISTOGRAM"])
 
-        if above20 and above50 and above200:
-            trend = "STRONG BULLISH"
-        elif not above20 and not above50 and not above200:
-            trend = "STRONG BEARISH"
-        elif above200:
-            trend = "LONG TERM BULLISH"
-        else:
-            trend = "SIDEWAYS"
+        atr = float(latest["ATR"])
 
-        if rsi >= 70:
-            rsi_signal = "OVERBOUGHT"
-        elif rsi <= 30:
-            rsi_signal = "OVERSOLD"
-        elif rsi >= 50:
-            rsi_signal = "BULLISH MOMENTUM"
-        else:
-            rsi_signal = "BEARISH MOMENTUM"
+        volume = int(latest["Volume"])
+        average_volume = float(latest["AVG_VOLUME"])
+        relative_volume = float(latest["RVOL"])
+        volume_signal = latest["VOLUME_SIGNAL"]
 
-        print()
-        print("=" * 70)
-        print(symbol)
-        print("=" * 70)
+        expected_low = close - atr
+        expected_high = close + atr
 
-        print(f"Current Price : ₹{close:.2f}")
+        # ---------------------------------------------------------
+        # Build Analysis Object
+        # ---------------------------------------------------------
 
-        print("\nMoving Averages")
-        print("-" * 70)
+        return StockAnalysis(
 
-        print(f"EMA20  : ₹{ema20:.2f}")
-        print(f"EMA50  : ₹{ema50:.2f}")
-        print(f"EMA200 : ₹{ema200:.2f}")
+            symbol=symbol,
 
-        print("\nTrend Analysis")
-        print("-" * 70)
+            current_price=close,
 
-        print(f"Price Above EMA20  : {'YES' if above20 else 'NO'}")
-        print(f"Price Above EMA50  : {'YES' if above50 else 'NO'}")
-        print(f"Price Above EMA200 : {'YES' if above200 else 'NO'}")
+            ema20=ema20,
+            ema50=ema50,
+            ema200=ema200,
 
-        print(f"Overall Trend      : {trend}")
+            trend=trend_signal.direction,
 
-        print("\nMomentum")
-        print("-" * 70)
+            rsi=rsi,
+            rsi_signal=momentum_signal.direction,
 
-        print(f"RSI : {rsi:.2f}")
-        print(f"Signal : {rsi_signal}")
+            macd=macd,
+            macd_signal_line=macd_signal_line,
+            macd_histogram=macd_histogram,
+            macd_signal=momentum_signal.reason,
 
-        print("=" * 70)
+            atr=atr,
+
+            expected_low=expected_low,
+            expected_high=expected_high,
+
+            volume=volume,
+            average_volume=average_volume,
+            relative_volume=relative_volume,
+            volume_signal=volume_signal,
+
+            score=score["score"],
+            max_score=score["max_score"],
+            recommendation=score["recommendation"]
+
+        )
