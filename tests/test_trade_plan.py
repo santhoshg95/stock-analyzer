@@ -40,12 +40,25 @@ def main():
     print("TRADE PLAN")
     print("=" * 90)
 
-    for key, value in trade.items():
+    print(f"Entry           : ₹{trade.entry}")
 
-        print(f"{key:18}: {value}")
+    print(f"Stop Loss       : ₹{trade.stop_loss}")
+
+    print(f"Target 1        : ₹{trade.target1}")
+
+    print(f"Target 2        : ₹{trade.target2}")
+
+    print(f"Risk            : ₹{trade.risk}")
+
+    print(f"Reward          : ₹{trade.reward}")
+
+    print(f"Risk Reward     : {trade.risk_reward}")
+
+    print(f"Quality         : {trade.quality}")
 
     print("=" * 90)
 
 
 if __name__ == "__main__":
+
     main()

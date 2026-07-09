@@ -1,10 +1,11 @@
 """
 Trade Plan Engine
 
-Generates a practical trade plan using
-current price, support, resistance and
-risk/reward.
+Generates a complete trade plan using
+support, resistance and risk-reward.
 """
+
+from src.models.trade_plan import TradePlan
 
 
 class TradePlanEngine:
@@ -22,64 +23,62 @@ class TradePlanEngine:
 
         reward = entry_report["reward"]
 
-        rr = entry_report["risk_reward"]
+        risk_reward = entry_report["risk_reward"]
 
         quality = entry_report["quality"]
 
+        # ----------------------------------------------------
+
         if support is None or resistance is None:
 
-            return {
+            return TradePlan(
 
-                "entry": None,
+                entry=0.0,
 
-                "stop_loss": None,
+                stop_loss=0.0,
 
-                "target1": None,
+                target1=0.0,
 
-                "target2": None,
+                target2=0.0,
 
-                "risk_reward": None,
+                risk=0.0,
 
-                "quality": "UNKNOWN"
+                reward=0.0,
 
-            }
+                risk_reward=0.0,
 
-        # ---------------------------------------
-        # Entry
-        # ---------------------------------------
+                quality="UNKNOWN"
+
+            )
+
+        # ----------------------------------------------------
 
         entry = current_price
 
-        # ---------------------------------------
-        # Stop Loss
-        # ---------------------------------------
-
         stop_loss = support
-
-        # ---------------------------------------
-        # Targets
-        # ---------------------------------------
 
         target1 = resistance
 
         target2 = resistance + reward
 
-        return {
+        # ----------------------------------------------------
 
-            "entry": round(entry, 2),
+        return TradePlan(
 
-            "stop_loss": round(stop_loss, 2),
+            entry=round(entry, 2),
 
-            "target1": round(target1, 2),
+            stop_loss=round(stop_loss, 2),
 
-            "target2": round(target2, 2),
+            target1=round(target1, 2),
 
-            "risk": round(risk, 2),
+            target2=round(target2, 2),
 
-            "reward": round(reward, 2),
+            risk=round(risk, 2),
 
-            "risk_reward": rr,
+            reward=round(reward, 2),
 
-            "quality": quality
+            risk_reward=round(risk_reward, 2),
 
-        }
+            quality=quality
+
+        )
