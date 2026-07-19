@@ -1,9 +1,8 @@
 """
 Liquidity Analysis
-
-Analyzes tradability of option contracts.
 """
 
+from src.options.models.liquidity_analysis_result import LiquidityAnalysisResult
 from src.options.models.option_chain import OptionChain
 
 
@@ -15,31 +14,31 @@ class LiquidityAnalysis:
 
     MAX_SPREAD_PERCENT = 2.0
 
-    def analyze(self, chain: OptionChain):
+    def analyze(self, chain: OptionChain) -> LiquidityAnalysisResult:
 
         contracts = chain.calls + chain.puts
 
         if not contracts:
 
-            return {
+            return LiquidityAnalysisResult(
 
-                "status": "POOR",
+                status="POOR",
 
-                "confidence": 0,
+                confidence=0,
 
-                "average_spread": 0,
+                average_spread=0,
 
-                "liquid_contracts": 0,
+                liquid_contracts=0,
 
-                "illiquid_contracts": 0,
+                illiquid_contracts=0,
 
-                "reasons": [
+                reasons=[
 
                     "No option contracts available."
 
                 ]
 
-            }
+            )
 
         liquid = 0
         illiquid = 0
@@ -54,14 +53,17 @@ class LiquidityAnalysis:
 
                 continue
 
-            spread_percent = (
+            spread = (
+
                 (contract.ask - contract.bid)
+
                 / contract.ask
+
             ) * 100
 
-            spreads.append(spread_percent)
+            spreads.append(spread)
 
-            is_liquid = (
+            if (
 
                 contract.open_interest >= self.MIN_OPEN_INTEREST
 
@@ -71,11 +73,9 @@ class LiquidityAnalysis:
 
                 and
 
-                spread_percent <= self.MAX_SPREAD_PERCENT
+                spread <= self.MAX_SPREAD_PERCENT
 
-            )
-
-            if is_liquid:
+            ):
 
                 liquid += 1
 
@@ -83,17 +83,25 @@ class LiquidityAnalysis:
 
                 illiquid += 1
 
-        average_spread = (
+        average = (
 
-            sum(spreads) / len(spreads)
+            sum(spreads)
 
-            if spreads else 0
+            / len(spreads)
+
+            if spreads
+
+            else 0
 
         )
 
-        ratio = liquid / len(contracts)
+        confidence = round(
 
-        confidence = round(ratio * 100)
+            (liquid / len(contracts))
+
+            * 100
+
+        )
 
         if confidence >= 80:
 
@@ -113,28 +121,34 @@ class LiquidityAnalysis:
 
         reasons.append(
 
-            f"{liquid} out of {len(contracts)} contracts passed liquidity checks."
+            f"{liquid} of {len(contracts)} contracts are liquid."
 
         )
 
         reasons.append(
 
-            f"Average Bid/Ask Spread: {average_spread:.2f}%"
+            f"Average spread {average:.2f}%"
 
         )
 
-        return {
+        return LiquidityAnalysisResult(
 
-            "status": status,
+            status=status,
 
-            "confidence": confidence,
+            confidence=confidence,
 
-            "average_spread": round(average_spread, 2),
+            average_spread=round(
 
-            "liquid_contracts": liquid,
+                average,
 
-            "illiquid_contracts": illiquid,
+                2
 
-            "reasons": reasons
+            ),
 
-        }
+            liquid_contracts=liquid,
+
+            illiquid_contracts=illiquid,
+
+            reasons=reasons
+
+        )

@@ -17,7 +17,7 @@ from src.options.models.option_chain import OptionChain
 from src.options.models.option_contract import OptionContract
 
 
-def create_contract(
+def contract(
     strike,
     option_type,
     oi,
@@ -25,6 +25,11 @@ def create_contract(
     bid,
     ask,
     iv,
+    delta,
+    gamma,
+    theta,
+    vega,
+    rho,
 ):
 
     return OptionContract(
@@ -49,7 +54,17 @@ def create_contract(
 
         change_in_oi=5000,
 
-        implied_volatility=iv
+        implied_volatility=iv,
+
+        delta=delta,
+
+        gamma=gamma,
+
+        theta=theta,
+
+        vega=vega,
+
+        rho=rho,
 
     )
 
@@ -58,49 +73,69 @@ def main():
 
     calls = [
 
-        create_contract(
+        contract(
             1050,
             "CE",
             250000,
             5000,
             10,
             10.1,
-            28
+            28,
+            0.45,
+            0.05,
+            -2.1,
+            0.18,
+            0.07,
         ),
 
-        create_contract(
+        contract(
             1060,
             "CE",
             800,
             20,
             5,
             6.5,
-            30
-        )
+            30,
+            0.35,
+            0.03,
+            -1.8,
+            0.16,
+            0.05,
+        ),
 
     ]
 
     puts = [
 
-        create_contract(
+        contract(
             1000,
             "PE",
             400000,
             7000,
             12,
             12.1,
-            29
+            29,
+            -0.42,
+            0.06,
+            -2.4,
+            0.19,
+            -0.04,
         ),
 
-        create_contract(
+        contract(
             990,
             "PE",
             700,
             10,
             3,
             5.2,
-            27
-        )
+            27,
+            -0.50,
+            0.08,
+            -2.8,
+            0.22,
+            -0.06,
+        ),
 
     ]
 
@@ -114,7 +149,7 @@ def main():
 
         calls=calls,
 
-        puts=puts
+        puts=puts,
 
     )
 
@@ -128,15 +163,18 @@ def main():
 
     print(f"Status        : {analysis.status}")
     print(f"Confidence    : {analysis.confidence}")
+    print(f"Score         : {analysis.score}")
     print(f"PCR           : {analysis.pcr}")
     print(f"Average IV    : {analysis.iv_rank}")
     print(f"Max Pain      : {analysis.max_pain}")
     print(f"Support       : {analysis.strongest_support}")
     print(f"Resistance    : {analysis.strongest_resistance}")
+    print(f"Strategy      : {analysis.suggested_strategy}")
 
     print("\nReasons")
 
     for reason in analysis.reasons:
+
         print(f"• {reason}")
 
     print("=" * 100)

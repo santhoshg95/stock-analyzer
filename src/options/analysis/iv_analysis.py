@@ -2,6 +2,7 @@
 Implied Volatility Analysis
 """
 
+from src.options.models.iv_analysis_result import IVAnalysisResult
 from src.options.models.option_chain import OptionChain
 
 
@@ -13,27 +14,9 @@ class IVAnalysis:
 
     VERY_HIGH_IV = 35
 
-    def analyze(self, chain: OptionChain):
+    def analyze(self, chain: OptionChain) -> IVAnalysisResult:
 
         contracts = chain.calls + chain.puts
-
-        if not contracts:
-
-            return {
-
-                "average_iv": 0,
-
-                "status": "UNKNOWN",
-
-                "confidence": 0,
-
-                "reasons": [
-
-                    "No option contracts available."
-
-                ]
-
-            }
 
         ivs = [
 
@@ -47,23 +30,27 @@ class IVAnalysis:
 
         if not ivs:
 
-            return {
+            return IVAnalysisResult(
 
-                "average_iv": 0,
+                average_iv=0,
 
-                "status": "UNKNOWN",
+                status="UNKNOWN",
 
-                "confidence": 0,
+                confidence=0,
 
-                "reasons": [
+                reasons=[
 
-                    "No IV values available."
+                    "No IV available."
 
                 ]
 
-            }
+            )
 
-        average_iv = sum(ivs) / len(ivs)
+        average_iv = sum(
+
+            ivs
+
+        ) / len(ivs)
 
         reasons = []
 
@@ -76,12 +63,6 @@ class IVAnalysis:
             reasons.append(
 
                 "Premiums are cheap."
-
-            )
-
-            reasons.append(
-
-                "Not attractive for option selling."
 
             )
 
@@ -105,7 +86,7 @@ class IVAnalysis:
 
             reasons.append(
 
-                "Premiums are attractive for option selling."
+                "Premiums are attractive for selling."
 
             )
 
@@ -117,19 +98,13 @@ class IVAnalysis:
 
             reasons.append(
 
-                "Premiums are very expensive."
+                "Premiums are extremely expensive."
 
             )
 
-            reasons.append(
+        return IVAnalysisResult(
 
-                "High premium collection opportunity."
-
-            )
-
-        return {
-
-            "average_iv": round(
+            average_iv=round(
 
                 average_iv,
 
@@ -137,10 +112,10 @@ class IVAnalysis:
 
             ),
 
-            "status": status,
+            status=status,
 
-            "confidence": confidence,
+            confidence=confidence,
 
-            "reasons": reasons
+            reasons=reasons
 
-        }
+        )

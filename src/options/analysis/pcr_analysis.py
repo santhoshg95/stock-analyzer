@@ -3,27 +3,39 @@ Put Call Ratio Analysis
 """
 
 from src.options.models.option_chain import OptionChain
+from src.options.models.pcr_analysis_result import PCRAnalysisResult
 
 
 class PCRAnalysis:
+    """
+    Calculate Put Call Ratio.
+    """
 
-    def analyze(self, chain: OptionChain):
+    def analyze(self, chain: OptionChain) -> PCRAnalysisResult:
 
-        call_oi = sum(c.open_interest for c in chain.calls)
+        total_call_oi = sum(
 
-        put_oi = sum(p.open_interest for p in chain.puts)
+            call.open_interest
 
-        if call_oi == 0:
+            for call in chain.calls
 
-            return {
+        )
 
-                "pcr": 0,
+        total_put_oi = sum(
 
-                "sentiment": "UNKNOWN"
+            put.open_interest
 
-            }
+            for put in chain.puts
 
-        pcr = put_oi / call_oi
+        )
+
+        if total_call_oi == 0:
+
+            pcr = 0
+
+        else:
+
+            pcr = total_put_oi / total_call_oi
 
         if pcr > 1.2:
 
@@ -37,10 +49,20 @@ class PCRAnalysis:
 
             sentiment = "NEUTRAL"
 
-        return {
+        return PCRAnalysisResult(
 
-            "pcr": round(pcr, 2),
+            pcr=round(
 
-            "sentiment": sentiment
+                pcr,
 
-        }
+                2
+
+            ),
+
+            sentiment=sentiment,
+
+            total_call_oi=total_call_oi,
+
+            total_put_oi=total_put_oi
+
+        )
