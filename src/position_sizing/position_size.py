@@ -22,7 +22,12 @@ class PositionSizingEngine:
 
     ):
 
-        if entry is None or stop_loss is None:
+        if (
+            entry is None
+            or stop_loss is None
+            or entry <= 0
+            or stop_loss <= 0
+        ):
 
             return {
 

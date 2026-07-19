@@ -1,8 +1,8 @@
 """
 AI Decision Engine
 
-Combines historical, strategy and options intelligence into a
-single decision score.
+Combines historical, technical, strategy, options and market
+intelligence into a single AI decision.
 
 Author:
     AI Research Platform
@@ -10,8 +10,10 @@ Author:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from typing import Dict, Any
+from dataclasses import asdict
+from dataclasses import dataclass
+from typing import Any
+from typing import Dict
 
 
 @dataclass
@@ -32,13 +34,15 @@ class DecisionEngine:
 
     DEFAULT_WEIGHTS = {
 
-        "historical": 0.30,
+        "historical": 0.25,
 
-        "strategy": 0.25,
+        "technical": 0.20,
 
-        "options": 0.25,
+        "strategy": 0.20,
 
-        "market": 0.20,
+        "options": 0.20,
+
+        "market": 0.15,
 
     }
 
@@ -50,6 +54,7 @@ class DecisionEngine:
         self.weights = self.DEFAULT_WEIGHTS.copy()
 
         if weights:
+
             self.weights.update(weights)
 
     # ----------------------------------------------------
@@ -60,17 +65,25 @@ class DecisionEngine:
         strategy_score: float,
         options_score: float,
         market_score: float,
+        technical_score: float = 0.0,
     ) -> DecisionResult:
 
         weighted_score = (
 
-            historical_score * self.weights["historical"]
+            historical_score
+            * self.weights["historical"]
 
-            + strategy_score * self.weights["strategy"]
+            + technical_score
+            * self.weights["technical"]
 
-            + options_score * self.weights["options"]
+            + strategy_score
+            * self.weights["strategy"]
 
-            + market_score * self.weights["market"]
+            + options_score
+            * self.weights["options"]
+
+            + market_score
+            * self.weights["market"]
 
         )
 
@@ -83,23 +96,38 @@ class DecisionEngine:
         )
 
         explanations = self._explain(
+
             historical_score,
+
+            technical_score,
+
             strategy_score,
+
             options_score,
+
             market_score,
+
         )
 
         return DecisionResult(
 
-            score=round(weighted_score, 2),
+            score=round(
+                weighted_score,
+                2,
+            ),
 
             recommendation=recommendation,
 
-            confidence=round(confidence, 2),
+            confidence=round(
+                confidence,
+                2,
+            ),
 
             component_scores={
 
                 "historical": historical_score,
+
+                "technical": technical_score,
 
                 "strategy": strategy_score,
 
@@ -116,15 +144,20 @@ class DecisionEngine:
     # ----------------------------------------------------
 
     @staticmethod
-    def _recommendation(score: float) -> str:
+    def _recommendation(
+        score: float,
+    ) -> str:
 
         if score >= 90:
+
             return "STRONG BUY"
 
         if score >= 75:
+
             return "BUY"
 
         if score >= 60:
+
             return "WATCH"
 
         return "AVOID"
@@ -132,46 +165,87 @@ class DecisionEngine:
     # ----------------------------------------------------
 
     @staticmethod
-    def _confidence(score: float) -> float:
+    def _confidence(
+        score: float,
+    ) -> float:
 
         return min(
+
             100.0,
-            max(0.0, score),
+
+            max(
+                0.0,
+                score,
+            ),
+
         )
 
     # ----------------------------------------------------
 
     @staticmethod
     def _explain(
+
         historical: float,
+
+        technical: float,
+
         strategy: float,
+
         options: float,
+
         market: float,
+
     ) -> list[str]:
 
         notes = []
 
         if historical >= 80:
+
             notes.append(
                 "Historical performance is strong."
             )
 
+        if technical >= 80:
+
+            notes.append(
+                "Technical indicators strongly support the trade."
+            )
+
+        elif technical >= 60:
+
+            notes.append(
+                "Technical trend is moderately bullish."
+            )
+
         if strategy >= 75:
+
             notes.append(
                 "Strategy alignment is favorable."
             )
 
         if options >= 75:
+
             notes.append(
                 "Options setup is attractive."
             )
 
         if market >= 75:
+
             notes.append(
                 "Market conditions support the trade."
             )
 
+        if (
+            historical < 50
+            and technical < 50
+        ):
+
+            notes.append(
+                "Historical and technical strength are weak."
+            )
+
         if not notes:
+
             notes.append(
                 "No strong supporting factors identified."
             )

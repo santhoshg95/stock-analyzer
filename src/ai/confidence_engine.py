@@ -9,8 +9,10 @@ Author:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from typing import Dict, Any
+from dataclasses import asdict
+from dataclasses import dataclass
+from typing import Any
+from typing import Dict
 
 
 @dataclass
@@ -31,21 +33,23 @@ class ConfidenceEngine:
 
     DEFAULT_WEIGHTS = {
 
-        "historical": 0.20,
+        "historical": 0.18,
 
-        "strategy": 0.20,
+        "technical": 0.18,
 
-        "market": 0.15,
+        "strategy": 0.18,
 
-        "options": 0.15,
+        "market": 0.14,
 
-        "liquidity": 0.10,
+        "options": 0.12,
 
-        "volatility": 0.10,
+        "liquidity": 0.08,
 
-        "signal_agreement": 0.05,
+        "volatility": 0.06,
 
-        "prediction_accuracy": 0.05,
+        "signal_agreement": 0.03,
+
+        "prediction_accuracy": 0.03,
 
     }
 
@@ -57,6 +61,7 @@ class ConfidenceEngine:
         self.weights = self.DEFAULT_WEIGHTS.copy()
 
         if weights:
+
             self.weights.update(weights)
 
     # ----------------------------------------------------------
@@ -71,34 +76,52 @@ class ConfidenceEngine:
         volatility_score: float,
         signal_agreement: float,
         prediction_accuracy: float,
+        technical_score: float = 0.0,
     ) -> ConfidenceResult:
 
         confidence = (
 
-            historical_score * self.weights["historical"]
+            historical_score
+            * self.weights["historical"]
 
-            + strategy_score * self.weights["strategy"]
+            + technical_score
+            * self.weights["technical"]
 
-            + market_score * self.weights["market"]
+            + strategy_score
+            * self.weights["strategy"]
 
-            + options_score * self.weights["options"]
+            + market_score
+            * self.weights["market"]
 
-            + liquidity_score * self.weights["liquidity"]
+            + options_score
+            * self.weights["options"]
 
-            + volatility_score * self.weights["volatility"]
+            + liquidity_score
+            * self.weights["liquidity"]
 
-            + signal_agreement * self.weights["signal_agreement"]
+            + volatility_score
+            * self.weights["volatility"]
 
-            + prediction_accuracy * self.weights["prediction_accuracy"]
+            + signal_agreement
+            * self.weights["signal_agreement"]
+
+            + prediction_accuracy
+            * self.weights["prediction_accuracy"]
 
         )
 
         confidence = round(
+
             max(
                 0,
-                min(confidence, 100),
+                min(
+                    confidence,
+                    100,
+                ),
             ),
+
             2,
+
         )
 
         return ConfidenceResult(
@@ -114,6 +137,8 @@ class ConfidenceEngine:
             component_scores={
 
                 "historical": historical_score,
+
+                "technical": technical_score,
 
                 "strategy": strategy_score,
 
@@ -137,6 +162,8 @@ class ConfidenceEngine:
 
                 historical_score,
 
+                technical_score,
+
                 strategy_score,
 
                 market_score,
@@ -155,15 +182,19 @@ class ConfidenceEngine:
     ) -> str:
 
         if confidence >= 90:
+
             return "VERY_HIGH"
 
         if confidence >= 80:
+
             return "HIGH"
 
         if confidence >= 70:
+
             return "MEDIUM"
 
         if confidence >= 50:
+
             return "LOW"
 
         return "VERY_LOW"
@@ -174,6 +205,7 @@ class ConfidenceEngine:
     def _reasons(
         confidence: float,
         historical: float,
+        technical: float,
         strategy: float,
         market: float,
         options: float,
@@ -182,26 +214,43 @@ class ConfidenceEngine:
         reasons = []
 
         if historical >= 80:
+
             reasons.append(
                 "Historical metrics are strong."
             )
 
+        if technical >= 80:
+
+            reasons.append(
+                "Technical indicators strongly support the trade."
+            )
+
+        elif technical >= 60:
+
+            reasons.append(
+                "Technical trend is favourable."
+            )
+
         if strategy >= 75:
+
             reasons.append(
                 "Selected strategy has high probability."
             )
 
         if market >= 70:
+
             reasons.append(
                 "Market regime supports the trade."
             )
 
         if options >= 70:
+
             reasons.append(
                 "Options chain confirms the setup."
             )
 
         if confidence < 70:
+
             reasons.append(
                 "Overall confidence is below execution threshold."
             )
@@ -216,6 +265,7 @@ class ConfidenceEngine:
     ) -> float:
 
         if not scores:
+
             return 0.0
 
         return round(
