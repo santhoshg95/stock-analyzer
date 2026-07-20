@@ -32,6 +32,8 @@ class BreakoutDetector:
         levels = SupportResistanceEngine.calculate(df)
 
         resistance = levels["resistance"]
+        broken_resistance = levels.get("broken_resistance")
+        atr = float(latest["ATR"])
 
         # ----------------------------------------
         # Individual Conditions
@@ -40,7 +42,9 @@ class BreakoutDetector:
         conditions = {
 
             "Above Resistance": (
-                resistance is not None and close > resistance
+                broken_resistance is not None
+                and close > broken_resistance
+                and close - broken_resistance <= atr
             ),
 
             "Bullish Trend": (
@@ -75,6 +79,8 @@ class BreakoutDetector:
 
             "conditions": conditions,
 
-            "resistance": resistance
+            "resistance": resistance,
+
+            "broken_resistance": broken_resistance,
 
         }

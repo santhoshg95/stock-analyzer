@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import asdict
 from datetime import date
 from typing import Any
 
@@ -10,9 +11,13 @@ from src.sector.sector_mapper import SectorMapper
 from src.news.analysis_service import NewsAnalysisService
 from src.workflow.context_enrichment import ContextEnrichment
 from src.learning.outcome_repository import OutcomeRepository
+from src.position_sizing.position_size import PositionSizingEngine
+from src.trade_plan.trade_plan import TradePlanEngine
+from src.options.short_put import ShortPutStrategyEngine
 from src.workflow.decision_policy import (
     classify_setup, market_alignment, normalize_market_regime,
     option_confidence_status, pcr_adjustment, market_risk_scale,
+    combine_strategy_eligibility,
 )
 
 
@@ -48,7 +53,13 @@ class DailyTradingAssistant:
         return round(min(95, max(0, score * 0.60 + confidence * 0.25 + breakout * 3 + news_score * 0.10)), 2)
 
     @staticmethod
-    def _trade_readiness(analysis: dict, candidate: dict, alignment: dict,
+    def _available_weighted_score(components: list[tuple[float, float, bool]]) -> float:
+        """Average only available evidence; unavailable context has zero impact."""
+        available = [(score, weight) for score, weight, is_available in components if is_available]
+        total_weight = sum(weight for _, weight in available)
+        return sum(score * weight for score, weight in available) / total_weight if total_weight else 0.0
+
+    def _trade_readiness(self, analysis: dict, candidate: dict, alignment: dict,
                          sector_data: dict, option: dict, setup: str,
                          seasonality: dict | None = None,
                          regime_history: dict | None = None) -> dict:
@@ -61,15 +72,15 @@ class DailyTradingAssistant:
             {"name": "technical_score", "passed": candidate["technical_score"] >= 55,
              "detail": f"{candidate['technical_score']}/100 (minimum 55)"},
             {"name": "entry_confirmation", "passed": entry_confirmed,
-             "detail": "all confirmation checks passed" if entry_confirmed else "waiting for EMA20, candle, higher-low, volume and MACD confirmation"},
+             "detail": "all confirmation checks passed" if entry_confirmed else "waiting for EMA20, bullish candle, volume above 1.2x and MACD confirmation"},
             {"name": "volume", "passed": analysis["analysis"]["relative_volume"] >= .75,
              "detail": f"relative volume {analysis['analysis']['relative_volume']:.2f}x (minimum 0.75x)"},
             {"name": "market_alignment", "passed": alignment["status"] != "CONFLICT",
              "detail": alignment["status"]},
             {"name": "sector_support", "passed": not sector_data.get("available") or sector_data.get("score", 50) >= 50,
              "detail": sector_data.get("rating", "UNAVAILABLE")},
-            {"name": "risk_reward", "passed": candidate["trade_plan"]["risk_reward"] >= 1.5,
-             "detail": f"1:{candidate['trade_plan']['risk_reward']} (minimum 1:1.5)"},
+            {"name": "risk_reward", "passed": candidate["trade_plan"]["risk_reward"] >= self.platform.settings.equity_min_risk_reward,
+             "detail": f"1:{candidate['trade_plan']['risk_reward']} (minimum 1:{self.platform.settings.equity_min_risk_reward})"},
             {"name": "option_execution", "passed": option.get("available", False),
              "detail": "executable structure available" if option.get("available") else option.get("reason", "option data unavailable")},
         ]
@@ -109,7 +120,7 @@ class DailyTradingAssistant:
             context = sector_strength.get(sector, {})
             candidate_score = sum(item["ai_score"] for item in items) / len(items)
             index_available = context.get("available", False)
-            index_score = context.get("score", 50)
+            index_score = context.get("score", 50) if index_available else 50
             # Candidate quality remains useful when a Yahoo sector index is unavailable.
             rank_score = candidate_score * .6 + index_score * .4
             rows.append({"sector": sector, "score": round(rank_score, 2),
@@ -127,10 +138,8 @@ class DailyTradingAssistant:
         """Reject only critical news, execution, and data-quality failures."""
         conflicts = []
         critical_conflicts = []
-        headlines = " ".join(item.get("title", "") for item in news.get("headlines", [])).lower()
-        negative_phrases = ("don't buy", "do not buy", "sell", "avoid", "downgrade", "fraud", "probe")
-        if news.get("sentiment") == "BEARISH" or any(phrase in headlines for phrase in negative_phrases):
-            critical_conflicts.append("negative news or explicit negative analyst headline")
+        if news.get("sentiment") == "BEARISH" or news.get("trade_impact") == "BLOCK":
+            critical_conflicts.append("AI news analysis identified material bearish trade risk")
         if news.get("events"):
             critical_conflicts.append("news risk event: " + ", ".join(news["events"]))
         if candidate["action"] in {"BUY", "BUY ON DIP"}:
@@ -149,7 +158,6 @@ class DailyTradingAssistant:
                 "decision": "APPROVED" if not critical_conflicts else "EXCLUDED"}
 
     def _trade(self, rank: int, candidate: dict[str, Any], market: dict[str, Any], sector_strength: dict[str, Any]) -> dict[str, Any]:
-        plan = candidate["trade_plan"]
         analysis = self.platform.analyze(candidate["symbol"])
         sector = self.sectors.get_sector(candidate["symbol"])
         sector_data = sector_strength.get(sector, {"available": False, "score": 50, "rating": "UNAVAILABLE"})
@@ -160,8 +168,28 @@ class DailyTradingAssistant:
         direction = "BULLISH" if candidate["action"] in {"BUY", "BUY ON DIP", "WATCH"} else "BEARISH"
         normalized_regime = normalize_market_regime(market.get("regime", "UNAVAILABLE"), market.get("confidence", 0))
         alignment = market_alignment(normalized_regime, market.get("confidence", 0), direction)
+        technical = analysis["analysis"]
+        contextual_breakout_probability = round(
+            (20 if technical["relative_volume"] >= 1.2 else 10 if technical["relative_volume"] >= .9 else 0)
+            + (20 if technical["macd"] > technical["macd_signal_line"] else 0)
+            + (20 if relative_strength.get("available") and relative_strength.get("score", 0) >= 60 else 10 if not relative_strength.get("available") else 0)
+            + (20 if sector_data.get("available") and sector_data.get("score", 0) >= 60 else 10 if not sector_data.get("available") else 0)
+            + (20 if alignment["status"] == "ALIGNED" else 10 if alignment["status"] in {"UNCERTAIN", "NEUTRAL"} else 0),
+            2,
+        )
+        if technical["relative_volume"] < .9 or technical["macd"] <= technical["macd_signal_line"]:
+            contextual_breakout_probability = min(contextual_breakout_probability, 60)
+        plan = asdict(TradePlanEngine.generate(
+            candidate.get("entry_report", analysis["entry"]),
+            breakout_probability=contextual_breakout_probability,
+        ))
         risk_scale = market_risk_scale(market.get("confidence", 0), market.get("available", False))
-        base_risk = candidate["position_size"]
+        base_risk = PositionSizingEngine.calculate(
+            self.platform.settings.capital,
+            self.platform.settings.risk_percent,
+            plan["entry"],
+            plan["stop_loss"],
+        )
         scaled_quantity = int(base_risk.get("quantity", 0) * risk_scale)
         scaled_risk = {**base_risk, "quantity": scaled_quantity,
                        "capital_used": round(base_risk.get("capital_used", 0) * risk_scale, 2),
@@ -183,13 +211,21 @@ class DailyTradingAssistant:
             news = NewsAnalysisService.analyze(candidate["symbol"])
         else:
             news = {
-                "available": False, "score": 0, "sentiment": "UNAVAILABLE",
+                "available": False, "score": 0, "sentiment": "NEUTRAL",
                 "confidence": 0, "article_count": 0, "events": [], "headlines": [],
+                "analysis_method": "UNAVAILABLE", "score_impact": 0,
                 "reasons": ["News analysis requires live mode (MARKET_DATA_SOURCE=kite)."],
             }
+        short_put = option.get("short_put", {"available": False, "rejection_code": "OPTION_DATA_UNAVAILABLE",
+                                             "rejection_reasons": ["Short-Put analysis is unavailable."]})
+        short_put = ShortPutStrategyEngine.apply_context(
+            short_put, alignment, sector_data, news, self.platform.settings,
+        )
+        option = {**option, "short_put": short_put}
+        short_put_approved = bool(short_put.get("available"))
         validation = self._conflict_gate(candidate, option, news)
-        adjustments = news["score"] * 0.15
-        if sector_data["score"]:
+        adjustments = news["score"] * 0.15 if news.get("available") else 0
+        if sector_data.get("available"):
             adjustments += (sector_data["score"] - 50) * 0.10
         if relative_strength["available"]:
             adjustments += (relative_strength["score"] - 50) * 0.10
@@ -205,14 +241,17 @@ class DailyTradingAssistant:
             option_score += 15
         elif option_status == "CONFLICT":
             option_score -= 10
-        elif option_status in {"UNRELIABLE", "UNAVAILABLE"}:
+        elif option_status == "UNRELIABLE":
             option_score -= 15
-        sector_score = sector_data.get("score", 50)
-        relative_score = relative_strength.get("score", 50) if relative_strength.get("available") else 50
-        unified_score = round(min(100, max(0,
-            candidate["technical_score"] * .55 + alignment["score"] * .15 + sector_score * .10
-            + relative_score * .10 + candidate["stock_liquidity"]["score"] * .06 + option_score * .04
-            - alignment["penalty"])), 2)
+        unified_score = self._available_weighted_score([
+            (candidate["technical_score"], .55, True),
+            (alignment["score"], .15, True),
+            (sector_data.get("score", 50), .10, bool(sector_data.get("available"))),
+            (relative_strength.get("score", 50), .10, bool(relative_strength.get("available"))),
+            (candidate["stock_liquidity"]["score"], .06, True),
+            (option_score, .04, option.get("confidence") is not None),
+        ])
+        unified_score = round(min(100, max(0, unified_score - alignment["penalty"])), 2)
         # Seasonality is contextual: at most +/-1.5 points and only with five
         # or more observations. Regime history carries more weight (up to 3).
         seasonality_adjustment = 0.0
@@ -228,7 +267,10 @@ class DailyTradingAssistant:
             analysis["analysis"]["trend"], analysis["analysis"]["rsi_signal"]
         )
         entry_eligible = setup_evaluation.get("stage_2", {}).get("eligible", False)
-        probability = self._technical_probability({**candidate, "breakout": analysis["breakout"]}, news["score"])
+        probability = self._technical_probability(
+            {**candidate, "breakout": analysis["breakout"]},
+            news["score"] if news.get("available") else 0,
+        )
         calibrated_probability = self.outcomes.contextual_probability(setup, normalized_regime)
         if calibrated_probability is None:
             calibrated_probability = self.outcomes.calibrated_probability(candidate["action"])
@@ -244,23 +286,32 @@ class DailyTradingAssistant:
         ]
         reasons.extend(option.get("reasons", []))
         reasons.extend(news["reasons"])
-        low_risk_reward = plan["risk_reward"] < 1.5
+        minimum_equity_rr = self.platform.settings.equity_min_risk_reward
+        low_risk_reward = plan["risk_reward"] < minimum_equity_rr
+        strategy_eligibility = combine_strategy_eligibility(
+            entry_eligible, plan["risk_reward"], minimum_equity_rr, short_put_approved,
+        )
         # Reversal candidates remain observable while their entry develops;
         # inadequate R:R still makes them ineligible for an actual trade.
-        risk_reward_rejects_setup = low_risk_reward and setup != "REVERSAL CANDIDATE"
-        critical_failure = (not validation["approved"] or risk_reward_rejects_setup
-                            or plan["stop_loss"] <= 0 or scaled_quantity <= 0)
+        risk_reward_rejects_setup = low_risk_reward and setup != "REVERSAL CANDIDATE" and not strategy_eligibility["short_put_approved"]
+        equity_execution_failure = (
+            risk_reward_rejects_setup or plan["stop_loss"] <= 0 or scaled_quantity <= 0
+        )
+        critical_failure = (
+            not validation["approved"]
+            or (equity_execution_failure and not short_put_approved)
+        )
         if critical_failure or unified_score < 55:
             status = "REJECTED"
-        elif (not entry_eligible or unified_score < 70 or setup in {"BULLISH_PULLBACK", "BEARISH_BOUNCE", "REVERSAL CANDIDATE"}
-              or (option_status in {"CONFLICT", "UNRELIABLE", "UNAVAILABLE"} and not budget_only_option_failure)
-              or (market.get("confidence", 0) >= 65 and alignment["status"] == "CONFLICT")):
+        elif (not short_put_approved and (not entry_eligible or unified_score < 70 or setup in {"BULLISH_PULLBACK", "BEARISH_BOUNCE", "REVERSAL CANDIDATE"}
+              or (market.get("confidence", 0) >= 65 and alignment["status"] == "CONFLICT"))):
             status = "WATCHLIST"
         else:
             status = "TRADE"
         status_reasons = list(validation["critical_conflicts"])
-        if plan["risk_reward"] < 1.5:
-            status_reasons.append(f"Risk/reward {plan['risk_reward']}:1 is below the 1.5 minimum.")
+        if plan["risk_reward"] < minimum_equity_rr:
+            status_reasons.append(f"Risk/reward {plan['risk_reward']}:1 is below the {minimum_equity_rr} minimum.")
+            status_reasons.extend(plan.get("diagnostics", []))
         if plan["stop_loss"] <= 0:
             status_reasons.append("Stop-loss is invalid.")
         if scaled_quantity <= 0:
@@ -273,11 +324,18 @@ class DailyTradingAssistant:
             if not entry_eligible:
                 missing = setup_evaluation.get("stage_2", {}).get("missing", [])
                 status_reasons.append("Entry confirmation missing: " + ", ".join(missing))
-            if option_status in {"CONFLICT", "UNRELIABLE", "UNAVAILABLE"} and not budget_only_option_failure:
+            if option_status in {"CONFLICT", "UNRELIABLE"} and not budget_only_option_failure:
                 rejection = self._option_rejection(option)
                 status_reasons.append(rejection.get("reason", f"Option confirmation is {option_status}."))
             if market.get("confidence", 0) >= 65 and alignment["status"] == "CONFLICT":
                 status_reasons.append("Trade direction conflicts with a confirmed market regime.")
+        equity_eligible = (
+            strategy_eligibility["equity_approved"]
+            and plan["stop_loss"] > 0
+            and scaled_quantity > 0
+            and validation["approved"]
+            and status == "TRADE"
+        )
         eligibility = {"eligible": status == "TRADE", "status": status,
                        "blocking_reasons": status_reasons,
                        "model_confidence_does_not_imply_eligibility": True}
@@ -295,6 +353,17 @@ class DailyTradingAssistant:
                                  "estimated_probability": probability,
                                  "calibrated_probability": calibrated_probability},
             "trade_eligibility": eligibility,
+            "equity_eligibility": {
+                "eligible": equity_eligible,
+                "status": "APPROVED" if equity_eligible else "REJECTED",
+                "reason": None if equity_eligible else f"Equity reward/risk or entry confirmation failed ({plan['risk_reward']}:1).",
+            },
+            "short_put_eligibility": {
+                "eligible": short_put_approved,
+                "status": "APPROVED" if short_put_approved else "REJECTED",
+                "rejection_code": short_put.get("rejection_code"),
+                "reasons": short_put.get("rejection_reasons", []),
+            },
             "trade_readiness": readiness,
             "current_month_seasonality": {**seasonality, "score_adjustment": round(seasonality_adjustment, 2)},
             "regime_history": {**regime_history, "score_adjustment": round(regime_adjustment, 2)},
@@ -333,11 +402,17 @@ class DailyTradingAssistant:
                 "target_2": plan["target2"],
                 "target_3": plan["target3"],
                 "risk_reward": plan["risk_reward"],
+                "expected_reward": plan.get("expected_reward", plan["reward"]),
+                "nearest_target_reward": plan.get("nearest_target_reward", plan["reward"]),
+                "target_basis": plan.get("target_basis", "NEAREST_RESISTANCE"),
+                "breakout_probability": plan.get("breakout_probability", 0),
+                "target_diagnostics": plan.get("diagnostics", []),
             },
             "risk": scaled_risk,
             "stock_liquidity": candidate["stock_liquidity"],
             "trust": candidate["trust"],
             "option_strategy": option,
+            "short_put_strategy": short_put,
             "news": news,
             "market_context": {**market, "regime": normalized_regime},
             "sector_context": {"sector": sector, **sector_data},
@@ -376,13 +451,19 @@ class DailyTradingAssistant:
             item["option_strategy"].get("strategy") for item in trades
             if item["option_strategy"].get("available") and item["option_strategy"].get("strategy")
         )
+        short_put_plans = [item.get("short_put_strategy", {}) for item in reviewed]
+        approved_short_puts = [plan for plan in short_put_plans if plan.get("available")]
+        short_put_rejections = Counter(
+            plan.get("rejection_code") for plan in short_put_plans
+            if not plan.get("available") and plan.get("rejection_code")
+        )
         stage_counts = ranked.get("statistics", {})
         historical_learning = self.outcomes.learning_summary()
         sector_ranking = self._rank_sectors(reviewed, sector_strength)
         context_statistics = {
             "news": {
-                "passed": sum(1 for item in reviewed if item["news"].get("available") and item["news"].get("sentiment") != "BEARISH" and not item["news"].get("events")),
-                "failed": sum(1 for item in reviewed if item["news"].get("available") and (item["news"].get("sentiment") == "BEARISH" or item["news"].get("events"))),
+                "passed": sum(1 for item in reviewed if item["news"].get("available") and item["news"].get("sentiment") != "BEARISH" and item["news"].get("trade_impact") != "BLOCK" and not item["news"].get("events")),
+                "failed": sum(1 for item in reviewed if item["news"].get("available") and (item["news"].get("sentiment") == "BEARISH" or item["news"].get("trade_impact") == "BLOCK" or item["news"].get("events"))),
                 "unavailable": sum(1 for item in reviewed if not item["news"].get("available")),
             },
             "sector": {
@@ -397,7 +478,7 @@ class DailyTradingAssistant:
             },
         }
         trust_passed = stage_counts.get("trust_passed", len(ranked["suggestions"]))
-        risk_valid = sum(1 for item in reviewed if item["levels"]["risk_reward"] >= 1.5 and item["levels"]["stop_loss"] > 0)
+        risk_valid = sum(1 for item in reviewed if item["levels"]["risk_reward"] >= self.platform.settings.equity_min_risk_reward and item["levels"]["stop_loss"] > 0)
         filter_stages = [
             {"stage": "universe", "input": ranked["universe_size"], "passed": ranked["universe_size"], "rejected": 0},
             {"stage": "analysis", "input": ranked["universe_size"], "passed": stage_counts.get("analysis_succeeded", 0), "rejected": stage_counts.get("analysis_failed", 0)},
@@ -445,6 +526,15 @@ class DailyTradingAssistant:
                 "conflicts_rejected": sum(1 for item in rejected if item["validation"]["critical_conflicts"]),
                 "stocks_shortlisted": len(trades) + len(watchlist),
                 "trades_generated": len(trades),
+                "short_put_reviewed": len(short_put_plans),
+                "short_put_approved": len(approved_short_puts),
+                "cash_secured_put_approved": sum(1 for plan in approved_short_puts if plan.get("strategy") == "CASH_SECURED_PUT"),
+                "bull_put_spread_approved": sum(1 for plan in approved_short_puts if plan.get("strategy") == "BULL_PUT_SPREAD"),
+                "short_put_rejected": len(short_put_plans) - len(approved_short_puts),
+                "average_probability_otm": round(sum(plan["candidate"]["probability_otm"] for plan in approved_short_puts) / len(approved_short_puts), 2) if approved_short_puts else None,
+                "average_otm_distance": round(sum(plan["candidate"]["strike_distance_percent"] for plan in approved_short_puts) / len(approved_short_puts), 2) if approved_short_puts else None,
+                "average_short_put_return_on_risk": round(sum(plan["return_on_risk_percent"] for plan in approved_short_puts) / len(approved_short_puts), 2) if approved_short_puts else None,
+                "most_common_short_put_rejection": short_put_rejections.most_common(1)[0][0] if short_put_rejections else None,
                 "average_probability": average_probability if trades else None,
                 "average_watchlist_probability": average_watchlist_probability,
                 "highest_ai_score": trades[0]["symbol"] if trades else None,

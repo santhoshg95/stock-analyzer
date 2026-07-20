@@ -57,6 +57,18 @@ def market_risk_scale(confidence: float, available: bool = True) -> float:
     return 1.0
 
 
+def combine_strategy_eligibility(entry_confirmed: bool, equity_risk_reward: float,
+                                 minimum_equity_risk_reward: float,
+                                 short_put_approved: bool) -> dict:
+    """Keep equity and short-Put decisions independent, then combine them."""
+    equity_approved = entry_confirmed and equity_risk_reward >= minimum_equity_risk_reward
+    return {
+        "equity_approved": equity_approved,
+        "short_put_approved": short_put_approved,
+        "any_approved": equity_approved or short_put_approved,
+    }
+
+
 def classify_setup(trend: str, momentum: str) -> str:
     trend, momentum = (trend or "").upper(), (momentum or "").upper()
     if "BULLISH" in trend and "BEARISH" in momentum:

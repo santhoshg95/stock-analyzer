@@ -17,7 +17,14 @@ class OptionStrategySelector:
         pcr: PCRAnalysisResult,
         iv: IVAnalysisResult,
         greeks: GreeksAnalysisResult,
+        direction: str | None = None,
     ) -> str:
+
+        direction = (direction or "NEUTRAL").upper().replace("_", " ")
+        if "BULLISH" in direction:
+            return "Bull Put Spread" if iv.status in ("HIGH", "VERY_HIGH") else "Bull Call Spread"
+        if "BEARISH" in direction:
+            return "Bear Call Spread" if iv.status in ("HIGH", "VERY_HIGH") else "Bear Put Spread"
 
         if (
 

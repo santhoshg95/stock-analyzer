@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 import json
 from pathlib import Path
 
 from src.options.models.option_chain import OptionChain
 from src.options.models.option_contract import OptionContract
 from src.options.black_scholes import implied_volatility, price_and_greeks
+
+
+class OptionInstrumentLookupError(ValueError):
+    pass
+
+
+class OptionQuoteUnavailableError(ValueError):
+    pass
 
 
 class KiteOptionChainProvider:
@@ -18,6 +26,7 @@ class KiteOptionChainProvider:
         self.kite = kite
         self.oi_cache_path = Path("data/cache/option_chain/oi_snapshots.json")
         self._instruments = None
+        self._chain_cache = {}
 
     def _load_instruments(self):
         if self._instruments is None:
@@ -34,7 +43,20 @@ class KiteOptionChainProvider:
         self.oi_cache_path.parent.mkdir(parents=True, exist_ok=True)
         self.oi_cache_path.write_text(json.dumps(values))
 
-    def get_chain(self, symbol: str, spot_price: float, width: float = 0.15) -> OptionChain:
+    def get_chains(self, symbol: str, spot_price: float, min_dte: int = 7,
+                   max_dte: int = 35, width: float = 0.15) -> list[OptionChain]:
+        today = date.today()
+        expiries = sorted({
+            item["expiry"] for item in self._load_instruments()
+            if item.get("name", "").upper() == symbol.upper()
+            and item.get("instrument_type") in {"CE", "PE"}
+            and item.get("expiry")
+            and today + timedelta(days=min_dte) <= item["expiry"] <= today + timedelta(days=max_dte)
+        })
+        return [self.get_chain(symbol, spot_price, width, expiry) for expiry in expiries]
+
+    def get_chain(self, symbol: str, spot_price: float, width: float = 0.15,
+                  selected_expiry=None) -> OptionChain:
         symbol = symbol.upper()
         today = date.today()
         instruments = [
@@ -45,17 +67,24 @@ class KiteOptionChainProvider:
             and item["expiry"] >= today
         ]
         if not instruments:
-            raise ValueError(f"No live option contracts found for {symbol}")
-        expiry = min(item["expiry"] for item in instruments)
+            raise OptionInstrumentLookupError(f"No live option instruments found for {symbol}")
+        expiry = selected_expiry or min(item["expiry"] for item in instruments)
+        cache_key = (symbol, round(float(spot_price), 2), width, str(expiry))
+        if cache_key in self._chain_cache:
+            return self._chain_cache[cache_key]
         minimum, maximum = spot_price * (1 - width), spot_price * (1 + width)
         contracts = [
             item for item in instruments
             if item["expiry"] == expiry and minimum <= float(item["strike"]) <= maximum
         ]
         quote_symbols = [f"NFO:{item['tradingsymbol']}" for item in contracts]
+        if not quote_symbols:
+            raise OptionInstrumentLookupError(f"No contracts for {symbol} in the requested strike/expiry range")
         quotes = {}
         for offset in range(0, len(quote_symbols), 200):
             quotes.update(self.kite.quote(quote_symbols[offset:offset + 200]))
+        if not quotes:
+            raise OptionQuoteUnavailableError(f"No option quotes returned for {symbol} {expiry}")
 
         previous_oi = self._previous_oi()
         current_oi = {}
@@ -64,6 +93,11 @@ class KiteOptionChainProvider:
         calls, puts = [], []
         for item in contracts:
             quote = quotes.get(f"NFO:{item['tradingsymbol']}", {})
+            quote_time = quote.get("timestamp")
+            stale = False
+            if isinstance(quote_time, datetime):
+                normalized_time = quote_time if quote_time.tzinfo else quote_time.replace(tzinfo=timezone.utc)
+                stale = datetime.now(timezone.utc) - normalized_time.astimezone(timezone.utc) > timedelta(minutes=30)
             depth = quote.get("depth", {})
             buy, sell = depth.get("buy", []), depth.get("sell", [])
             bid, ask = (float(buy[0]["price"]) if buy else 0.0), (float(sell[0]["price"]) if sell else 0.0)
@@ -83,7 +117,13 @@ class KiteOptionChainProvider:
                 rho=greeks["rho"] if greeks else None,
                 price_change=float(quote.get("net_change")) if quote.get("net_change") is not None else None,
                 lot_size=int(item.get("lot_size") or 1),
+                greeks_source="BLACK_SCHOLES" if greeks else None,
+                change_in_oi_reliable=key in previous_oi,
+                quote_timestamp=quote_time.isoformat() if isinstance(quote_time, datetime) else None,
+                quote_is_stale=stale,
             )
             (calls if contract.option_type == "CE" else puts).append(contract)
         self._save_oi(current_oi)
-        return OptionChain(symbol=symbol, spot_price=spot_price, expiry=str(expiry), calls=calls, puts=puts)
+        chain = OptionChain(symbol=symbol, spot_price=spot_price, expiry=str(expiry), calls=calls, puts=puts)
+        self._chain_cache[cache_key] = chain
+        return chain

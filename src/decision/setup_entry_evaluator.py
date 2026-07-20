@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from src.config.trading_config import EQUITY_MIN_RISK_REWARD
+
 
 class SetupEntryEvaluator:
     @staticmethod
@@ -15,28 +17,42 @@ class SetupEntryEvaluator:
         rsi = float(latest["RSI"])
         macd, macd_signal = float(latest["MACD"]), float(latest["MACD_SIGNAL"])
         rvol = float(latest["RVOL"])
+        histogram = float(latest.get("MACD_HISTOGRAM", macd - macd_signal))
+        previous = df.iloc[-2] if len(df) > 1 else latest
+        previous_histogram = float(previous.get(
+            "MACD_HISTOGRAM",
+            float(previous["MACD"]) - float(previous["MACD_SIGNAL"]),
+        ))
         support = entry.get("support")
         support_nearby = bool(support and close > 0 and 0 <= (close - support) / close <= .04)
 
-        lows = pd.to_numeric(df["Low"], errors="coerce").dropna()
-        higher_low = False
-        if len(lows) >= 8:
-            prior_swing_low = float(lows.iloc[-8:-4].min())
-            recent_swing_low = float(lows.iloc[-4:].min())
-            higher_low = recent_swing_low > prior_swing_low
-
         bullish_candle = candlestick.get("signal") == "BUY"
         macd_above_signal = macd > macd_signal
+        macd_turning_up = macd_above_signal and histogram >= previous_histogram
         volume_expansion = rvol >= 1.2
         above_ema20 = close > ema20
         bullish_stack = close > ema20 > ema50 > ema200
         long_trend_intact = ema50 > ema200 and close > ema200
+        good_risk_reward = (entry.get("risk_reward") or 0) >= EQUITY_MIN_RISK_REWARD
+        reversal_setup = rsi < 35 and macd_turning_up and support_nearby and good_risk_reward
+        higher_highs_and_lows = False
+        if len(df) >= 8 and {"High", "Low"}.issubset(df.columns):
+            highs = pd.to_numeric(df["High"], errors="coerce")
+            lows = pd.to_numeric(df["Low"], errors="coerce")
+            prior_high = highs.iloc[-8:-4].max()
+            recent_high = highs.iloc[-4:].max()
+            prior_low = lows.iloc[-8:-4].min()
+            recent_low = lows.iloc[-4:].min()
+            higher_highs_and_lows = bool(
+                pd.notna([prior_high, recent_high, prior_low, recent_low]).all()
+                and recent_high > prior_high and recent_low > prior_low
+            )
 
         if breakout.get("confirmed"):
             category = "BREAKOUT"
         elif bullish_stack and macd_above_signal:
             category = "TREND FOLLOWING"
-        elif rsi < 35 and (macd_above_signal or float(latest.get("MACD_HISTOGRAM", 0)) > 0) and support_nearby:
+        elif reversal_setup:
             category = "REVERSAL CANDIDATE"
         elif long_trend_intact and close <= ema20 and support_nearby:
             category = "PULLBACK"
@@ -48,7 +64,6 @@ class SetupEntryEvaluator:
         confirmation_checks = {
             "price_above_ema20": above_ema20,
             "bullish_reversal_candle": bullish_candle,
-            "higher_low": higher_low,
             "volume_above_1_2x": volume_expansion,
             "macd_above_signal": macd_above_signal,
         }
@@ -58,9 +73,9 @@ class SetupEntryEvaluator:
         eligible = category != "REJECT" and all(confirmation_checks.values())
         setup_evidence = {
             "oversold_rsi": rsi < 35,
-            "macd_turning_up": macd_above_signal,
+            "macd_turning_up": macd_turning_up,
             "support_nearby": support_nearby,
-            "risk_reward_at_least_1_5": (entry.get("risk_reward") or 0) >= 1.5,
+            "risk_reward_at_least_1_5": good_risk_reward,
             "long_trend_intact": long_trend_intact,
         }
         return {
@@ -69,7 +84,7 @@ class SetupEntryEvaluator:
             "stage_2": {"eligible": eligible, "status": "TRADE_ELIGIBLE" if eligible else "WAIT",
                         "checks": confirmation_checks,
                         "missing": [name for name, passed in confirmation_checks.items() if not passed]},
-            "momentum_label": ("EARLY_REVERSAL" if rsi < 35 and macd_above_signal
-                               else "STRONG_BULLISH" if bullish_stack and volume_expansion and higher_low
+            "momentum_label": ("EARLY REVERSAL" if rsi < 35 and macd_turning_up
+                               else "STRONG BULLISH" if bullish_stack and volume_expansion and higher_highs_and_lows
                                else "BULLISH" if above_ema20 and macd_above_signal else "BEARISH"),
         }

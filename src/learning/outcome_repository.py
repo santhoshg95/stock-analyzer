@@ -25,6 +25,9 @@ class OutcomeRepository:
     def record_recommendation(self, trade: dict[str, Any]) -> str:
         rows = self._read()
         identifier = f"{trade['symbol']}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
+        short_put = trade.get("short_put_strategy") or {}
+        option = trade.get("option_strategy") or {}
+        option_candidate = short_put.get("candidate") or {}
         rows.append({"id": identifier, "created_at": datetime.now(timezone.utc).isoformat(),
                      "symbol": trade["symbol"], "strategy": trade["strategy"],
                      "setup": trade.get("setup"),
@@ -32,6 +35,14 @@ class OutcomeRepository:
                      "sector": trade.get("sector"),
                      "direction": "BULLISH" if trade.get("recommendation") in {"BUY", "BUY ON DIP", "WATCH"} else "BEARISH",
                      "ai_score": trade["ai_score"], "estimated_probability": trade["probability"],
+                     "option_strategy": short_put.get("strategy") or option.get("strategy"),
+                     "option_approved": bool(short_put.get("available") or option.get("available")),
+                     "option_expiry": option_candidate.get("expiry"),
+                     "option_strike": option_candidate.get("sold_put_strike"),
+                     "option_delta": option_candidate.get("delta"),
+                     "option_iv": option_candidate.get("implied_volatility"),
+                     "option_probability": option_candidate.get("probability_otm"),
+                     "option_net_credit": short_put.get("net_credit"),
                      "outcome": None})
         self._write(rows)
         return identifier
@@ -48,6 +59,15 @@ class OutcomeRepository:
 
     def calibrated_probability(self, strategy: str, minimum_samples: int = 20) -> float | None:
         rows = [row for row in self._read() if row.get("strategy") == strategy and row.get("outcome") in {"WIN", "LOSS"}]
+        if len(rows) < minimum_samples:
+            return None
+        return round(sum(row["outcome"] == "WIN" for row in rows) * 100 / len(rows), 2)
+
+    def option_calibrated_probability(self, option_strategy: str,
+                                      minimum_samples: int = 20) -> float | None:
+        rows = [row for row in self._read()
+                if row.get("option_strategy") == option_strategy
+                and row.get("outcome") in {"WIN", "LOSS"}]
         if len(rows) < minimum_samples:
             return None
         return round(sum(row["outcome"] == "WIN" for row in rows) * 100 / len(rows), 2)

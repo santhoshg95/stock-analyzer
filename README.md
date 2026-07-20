@@ -59,8 +59,16 @@ Install the dependencies, then start the API:
 
 ```bash
 .venv/bin/pip install -r requirements.txt
+.venv/bin/python -m spacy download en_core_web_sm
 .venv/bin/uvicorn src.api:app --reload
 ```
+
+News analysis runs locally without a paid API. FinBERT classifies each
+headline and description as positive, negative, or neutral, while spaCy
+extracts named entities such as companies, people, and locations. The first
+live analysis downloads `ProsusAI/finbert` from Hugging Face and caches it;
+subsequent analyses reuse the local model. Override the defaults with
+`NEWS_FINBERT_MODEL` and `NEWS_SPACY_MODEL` if required.
 
 Available endpoints are `GET /health`, `GET /suggestions`, `GET /daily-report`, `POST /analyze`, `POST /backtest`,
 `POST /papertrade`, `POST /outcomes`, and `GET /portfolio`. Request bodies for the first two are
@@ -85,10 +93,11 @@ size details, enriches finalists with live option-chain intelligence when Kite
 is enabled, and prints a market summary. Add `--json` for the equivalent
 machine-readable report. It never submits live orders.
 
-For live Kite reports, news is collected only for the shortlisted stocks. Its
-headline sentiment and detected high-risk events adjust the unified AI score
-and estimated probability, and appear in the report with their source
-headlines. Cache mode intentionally does not fetch external news.
+For live Kite reports, Google News RSS is collected only for shortlisted
+stocks. FinBERT sentiment adjusts the unified score and estimated probability,
+and the report includes source headlines plus spaCy entities. The system does
+not fall back to hard-coded positive/negative keyword lists when local models
+are unavailable. Cache mode intentionally does not fetch external news.
 
 The reported probability is a documented heuristic until it has been
 calibrated with recorded out-of-sample trade outcomes; it is not a promise of

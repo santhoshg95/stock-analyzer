@@ -4,6 +4,7 @@ from src.workflow.decision_policy import (
     classify_setup, market_alignment, normalize_market_regime,
     option_confidence_status, pcr_adjustment,
     market_risk_scale,
+    combine_strategy_eligibility,
 )
 
 
@@ -29,3 +30,9 @@ class DecisionPolicyTests(unittest.TestCase):
         self.assertEqual(market_risk_scale(60), .75)
         self.assertEqual(market_risk_scale(80), 1.0)
         self.assertEqual(market_risk_scale(0, available=False), 1.0)
+
+    def test_equity_rr_rejection_does_not_block_approved_short_put(self):
+        result = combine_strategy_eligibility(False, .4, 1.5, True)
+        self.assertFalse(result["equity_approved"])
+        self.assertTrue(result["short_put_approved"])
+        self.assertTrue(result["any_approved"])

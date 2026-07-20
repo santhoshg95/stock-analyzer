@@ -50,3 +50,11 @@ class OptionContract:
 
     # Exchange lot size, supplied by the live instrument master when available.
     lot_size: int = 1
+
+    greeks_source: str | None = None
+
+    change_in_oi_reliable: bool = False
+
+    quote_timestamp: str | None = None
+
+    quote_is_stale: bool = False

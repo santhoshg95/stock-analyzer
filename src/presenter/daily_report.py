@@ -30,6 +30,9 @@ class DailyReportPresenter:
                 f"Current price        : {cls._money(trade['current_price'])}",
                 f"AI score             : {trade['ai_score']}/100",
                 f"News sentiment       : {trade['news']['sentiment']} ({trade['news']['score']:+.1f})",
+                f"News source          : {'AVAILABLE' if trade['news'].get('available') else 'UNAVAILABLE — neutral, no score impact'}",
+                f"News analysis        : {trade['news'].get('analysis_method', 'UNAVAILABLE')} / {trade['news'].get('model', 'N/A')}",
+                f"News materiality     : {trade['news'].get('materiality', 'UNAVAILABLE')} / impact {trade['news'].get('trade_impact', 'NONE')}",
                 f"Model confidence     : {trade['model_confidence']['decision_confidence']}%",
                 f"Estimated probability: {trade['model_confidence']['estimated_probability']}%",
                 f"Trade eligibility    : {trade['trade_eligibility']['status']}",
@@ -37,11 +40,15 @@ class DailyReportPresenter:
                 f"Trend / momentum     : {trade['technical']['trend']} / {trade['technical']['momentum']}",
                 f"Stock liquidity      : {trade['stock_liquidity']['status']} ({trade['stock_liquidity']['average_daily_turnover_crore']} cr avg/day)",
                 f"F&O trust filter      : {trade['trust']['status']} ({trade['trust']['score']}/100)",
-                f"Sector / relative str: {trade['sector_context']['rating']} / {trade['relative_strength']['rating']}",
+                f"Sector / relative str: {trade['sector_context']['rating']}"
+                f"{' (ignored)' if not trade['sector_context'].get('available') else ''} / "
+                f"{trade['relative_strength']['rating']}",
                 f"Support / resistance : {cls._money(levels['support'])} / {cls._money(levels['resistance'])}",
                 f"Entry / stop         : {cls._money(levels['entry'])} / {cls._money(levels['stop_loss'])}",
                 f"Targets              : {cls._money(levels['target_1'])}, {cls._money(levels['target_2'])}, {cls._money(levels['target_3'])}",
-                f"Risk reward          : 1:{levels['risk_reward']}",
+                f"Target model         : {levels.get('target_basis', 'NEAREST_RESISTANCE')} ({levels.get('breakout_probability', 0)}% breakout probability)",
+                f"Expected reward      : {cls._money(levels.get('expected_reward'))} (nearest target {cls._money(levels.get('nearest_target_reward'))})",
+                f"Expected risk/reward : 1:{levels['risk_reward']}",
                 f"Position size        : {risk['quantity']} shares (max risk {cls._money(risk['risk_amount'])})",
                 f"Risk scaling         : {trade['risk_policy']['position_scale'] * 100:.0f}% position; {trade['risk_policy']['effective_risk_percent']}% effective risk",
                 f"Option account       : {cls._money(trade['option_budget_policy']['capital_available'])} capital; {cls._money(trade['option_budget_policy']['risk_per_trade'])} max risk/trade",
@@ -94,6 +101,52 @@ class DailyReportPresenter:
                 rows.append(f"Trade readiness      : {readiness['percentage']}% — {readiness['classification']}")
                 for check in readiness["checks"]:
                     rows.append(f"  {'✓' if check['passed'] else '✗'} {check['name']}: {check['detail']}")
+            for diagnostic in levels.get("target_diagnostics", []):
+                rows.append(f"Target diagnostic    : {diagnostic}")
+            short_put = trade.get("short_put_strategy", {})
+            if short_put.get("available"):
+                candidate = short_put["candidate"]
+                sold = short_put["sold_leg"]
+                hedge = short_put.get("hedge_leg")
+                rows.extend([
+                    "SHORT PUT OPPORTUNITY", "-" * 68,
+                    f"Underlying setup      : {short_put['underlying_setup']}",
+                    f"Underlying price      : {cls._money(candidate['spot_price'])}",
+                    f"Expiry / DTE          : {candidate['expiry']} / {candidate['dte']}",
+                    f"Preferred strategy    : {short_put['strategy']}",
+                    f"Sold Put              : {sold['strike']} PE @ {cls._money(sold['premium'])}",
+                    f"Hedge Put             : {hedge['strike']} PE @ {cls._money(hedge['premium'])}" if hedge else "Hedge Put             : NONE — cash-secured assignment obligation",
+                    f"Distance OTM          : {cls._money(candidate['strike_distance'])} / {candidate['strike_distance_percent']}%",
+                    f"Distance below support: {cls._money(candidate['distance_below_support'])}",
+                    f"ATR / coverage        : {cls._money(candidate['atr'])} / {candidate['atr_coverage']}x",
+                    f"Delta                 : {candidate['delta'] if candidate['delta'] is not None else 'UNAVAILABLE'}",
+                    f"Probability OTM       : {candidate['probability_otm'] if candidate['probability_otm'] is not None else 'UNAVAILABLE'}% [{candidate['probability_source']} — {candidate['probability_quality']}]",
+                    f"Historical calibration: {candidate.get('historical_calibration', 'UNAVAILABLE')}",
+                    f"OI / change reliability: {candidate['open_interest']} / {'RELIABLE' if candidate.get('change_in_oi_reliable') else 'UNAVAILABLE'}",
+                    f"Option liquidity      : {short_put['evaluation']['liquidity_status']}",
+                    f"Net credit            : {cls._money(short_put['net_credit'])}",
+                    f"Maximum profit / loss : {cls._money(short_put['maximum_profit'])} / {cls._money(short_put['maximum_loss'])}",
+                    f"Breakeven             : {cls._money(short_put['breakeven'])}",
+                    f"Capital or margin     : {cls._money(short_put['capital_required'])}",
+                    f"Margin source         : {short_put.get('margin_source', 'DEFINED_MAXIMUM_LOSS')}",
+                    f"Exposure checks       : {short_put.get('exposure_status', 'AVAILABLE_CAPITAL_CHECKED')}",
+                    f"Return risk / margin  : {short_put['return_on_risk_percent']}% / {short_put['return_on_margin_percent']}%",
+                    f"Lots                  : {short_put['lots']}",
+                    "Short Put eligibility : APPROVED",
+                ])
+                for warning in short_put.get("warnings", []):
+                    rows.append(f"Short Put warning     : {warning}")
+            elif short_put:
+                rows.append(f"Short Put eligibility : REJECTED [{short_put.get('rejection_code', 'UNKNOWN')}]")
+                for reason in short_put.get("rejection_reasons", [])[:3]:
+                    rows.append(f"Short Put rejection   : {reason}")
+            strike_search = short_put.get("strike_search", {}) if short_put else {}
+            if strike_search:
+                rows.append(
+                    f"Short Put strike scan : {strike_search['evaluated']} contracts evaluated "
+                    f"in {strike_search['band']['lower']}–{strike_search['band']['upper']} band; "
+                    f"selected {strike_search['selected_strike']}"
+                )
             rows.append("Reasons              : " + "; ".join(trade["ai_reasoning"][:3]))
             if trade["validation"]["conflicts"]:
                 rows.append("Conflicts            : " + "; ".join(trade["validation"]["conflicts"]))
@@ -116,6 +169,15 @@ class DailyReportPresenter:
             f"Option-confirmed     : {summary.get('option_confirmed', 0)}",
             f"Conflicts rejected   : {summary.get('conflicts_rejected', 0)}",
             f"Trades generated     : {summary['trades_generated']}",
+            f"Short Put reviewed   : {summary.get('short_put_reviewed', 0)}",
+            f"Short Put approved   : {summary.get('short_put_approved', 0)}",
+            f"Cash-secured approved: {summary.get('cash_secured_put_approved', 0)}",
+            f"Bull Put approved    : {summary.get('bull_put_spread_approved', 0)}",
+            f"Short Put rejected   : {summary.get('short_put_rejected', 0)}",
+            f"Avg probability OTM  : {summary.get('average_probability_otm', 'N/A')}%",
+            f"Avg OTM distance     : {summary.get('average_otm_distance', 'N/A')}%",
+            f"Avg short-Put ROR    : {summary.get('average_short_put_return_on_risk', 'N/A')}%",
+            f"Common SP rejection  : {summary.get('most_common_short_put_rejection', 'N/A')}",
             f"Best sector          : {summary['best_sector']}",
             f"Best option strategy : {summary['best_option_strategy']}",
             f"Average trade probability: {summary['average_probability']}%" if summary.get("average_probability") is not None else "Average trade probability: N/A",

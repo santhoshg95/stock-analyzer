@@ -22,6 +22,38 @@ class MomentumSignal:
 
         macd_signal = float(latest["MACD_SIGNAL"])
 
+        close = float(latest["Close"])
+
+        ema20 = float(latest["EMA20"])
+
+        ema50 = float(latest["EMA50"])
+
+        relative_volume = float(latest.get("RVOL", 0))
+
+        previous = df.iloc[-2] if len(df) > 1 else latest
+
+        histogram = float(latest.get("MACD_HISTOGRAM", macd - macd_signal))
+
+        previous_histogram = float(previous.get(
+            "MACD_HISTOGRAM",
+            float(previous["MACD"]) - float(previous["MACD_SIGNAL"]),
+        ))
+
+        macd_turning_up = macd > macd_signal and histogram >= previous_histogram
+
+        higher_highs_and_lows = False
+
+        if len(df) >= 8 and {"High", "Low"}.issubset(df.columns):
+
+            prior = df.iloc[-8:-4]
+
+            recent = df.iloc[-4:]
+
+            higher_highs_and_lows = (
+                float(recent["High"].max()) > float(prior["High"].max())
+                and float(recent["Low"].min()) > float(prior["Low"].min())
+            )
+
         score = 0
 
         reasons = []
@@ -78,14 +110,15 @@ class MomentumSignal:
         # Final Direction
         # --------------------------------------------------
 
-        if rsi < 30 and macd > macd_signal:
+        if rsi < 35 and macd_turning_up:
 
             direction = "EARLY REVERSAL"
 
         elif (
             score >= 80
-            and float(latest["Close"]) > float(latest["EMA20"]) > float(latest["EMA50"])
-            and float(latest.get("RVOL", 0)) >= 1.2
+            and close > ema20 > ema50
+            and relative_volume >= 1.2
+            and higher_highs_and_lows
         ):
 
             direction = "STRONG BULLISH"

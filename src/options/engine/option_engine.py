@@ -57,6 +57,7 @@ class OptionEngine:
     def analyze(
         self,
         chain: OptionChain,
+        direction: str | None = None,
     ) -> OptionAnalysis:
 
         # ----------------------------------------------------
@@ -102,6 +103,8 @@ class OptionEngine:
             iv=iv,
 
             greeks=greeks,
+
+            direction=direction,
 
         )
 

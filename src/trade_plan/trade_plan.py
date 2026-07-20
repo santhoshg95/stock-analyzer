@@ -6,12 +6,15 @@ support, resistance and risk-reward.
 """
 
 from src.models.trade_plan import TradePlan
+from src.config.trading_config import EQUITY_MIN_RISK_REWARD
 
 
 class TradePlanEngine:
 
+    BREAKOUT_THRESHOLD = 65.0
+
     @staticmethod
-    def generate(entry_report):
+    def generate(entry_report, breakout_probability=None):
 
         current_price = entry_report["current_price"]
 
@@ -19,11 +22,14 @@ class TradePlanEngine:
 
         resistance = entry_report["resistance"]
 
-        quality = entry_report["quality"]
+        probability = float(
+            entry_report.get("breakout_probability", 0)
+            if breakout_probability is None else breakout_probability
+        )
 
         # ----------------------------------------------------
 
-        if support is None or resistance is None:
+        if support is None:
 
             return TradePlan(
 
@@ -55,14 +61,46 @@ class TradePlanEngine:
         minimum_distance = max(abs(entry - support), atr * 0.75, entry * 0.0075)
         stop_loss = entry - minimum_distance
         risk = abs(entry - stop_loss)
-        target1 = entry + risk * 1.5
-        if resistance > entry:
-            target1 = min(resistance, target1)
-        target2 = entry + risk * 2
-        target3 = entry + risk * 3
-        reward = target1 - entry
-        risk_reward = reward / risk if risk > 0 else 0
-        quality = "GOOD" if risk_reward >= 2 else "AVERAGE" if risk_reward >= 1.5 else "POOR"
+        atr_projection_2 = entry + max(atr * 2, risk * 2)
+        atr_projection_3 = entry + max(atr * 3, risk * 3)
+        target1 = resistance if resistance is not None and resistance > entry else entry + max(atr, risk)
+        candidates = [
+            float(level) for level in entry_report.get("resistance_levels", [])
+            if float(level) > target1
+        ]
+        next_resistance = entry_report.get("next_resistance")
+        if next_resistance and float(next_resistance) > target1:
+            candidates.append(float(next_resistance))
+        target2 = min(candidates) if candidates else atr_projection_2
+        target2 = max(target2, target1)
+        target3 = max(atr_projection_3, target2)
+
+        rewards = [max(0, target - entry) for target in (target1, target2, target3)]
+        nearest_reward = rewards[0]
+        resistance_is_close = nearest_reward < atr if atr > 0 else False
+        breakout_adjusted = resistance_is_close and probability >= TradePlanEngine.BREAKOUT_THRESHOLD
+        if breakout_adjusted:
+            expected_reward = .5 * rewards[0] + .3 * rewards[1] + .2 * rewards[2]
+            target_basis = "BREAKOUT_WEIGHTED_TARGETS"
+        else:
+            expected_reward = nearest_reward
+            target_basis = "NEAREST_RESISTANCE"
+        reward = expected_reward
+        risk_reward = expected_reward / risk if risk > 0 else 0
+        quality = "GOOD" if risk_reward >= 2 else "AVERAGE" if risk_reward >= EQUITY_MIN_RISK_REWARD else "POOR"
+        diagnostics = []
+        if resistance_is_close:
+            diagnostics.append(
+                f"Nearest resistance is only {nearest_reward:.2f} away versus ATR {atr:.2f}."
+            )
+        if breakout_adjusted:
+            diagnostics.append(
+                f"Credible breakout ({probability:.0f}%) activates weighted targets beyond nearest resistance."
+            )
+        elif resistance_is_close:
+            diagnostics.append(
+                f"Target too close; breakout probability {probability:.0f}% is below the {TradePlanEngine.BREAKOUT_THRESHOLD:.0f}% requirement."
+            )
 
         # ----------------------------------------------------
 
@@ -84,6 +122,16 @@ class TradePlanEngine:
 
             risk_reward=round(risk_reward, 2),
 
-            quality=quality
+            quality=quality,
+
+            expected_reward=round(expected_reward, 2),
+
+            nearest_target_reward=round(nearest_reward, 2),
+
+            target_basis=target_basis,
+
+            breakout_probability=round(probability, 2),
+
+            diagnostics=diagnostics,
 
         )

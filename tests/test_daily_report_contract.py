@@ -6,9 +6,16 @@ from unittest.mock import patch
 from src.application.platform import TradingPlatform
 from src.application.settings import PlatformSettings
 from src.presenter.daily_report import DailyReportPresenter
+from src.workflow.daily_trading_assistant import DailyTradingAssistant
 
 
 class DailyReportContractTests(unittest.TestCase):
+    def test_unavailable_context_is_omitted_from_weighted_score(self):
+        score = DailyTradingAssistant._available_weighted_score([
+            (80, .55, True), (20, .10, False), (60, .05, True),
+        ])
+        self.assertAlmostEqual(score, (80 * .55 + 60 * .05) / .60)
+
     @patch("src.workflow.daily_trading_assistant.OutcomeRepository")
     def test_cache_report_contains_actionable_trade_fields(self, outcome_repository):
         outcome_repository.return_value.calibrated_probability.return_value = None

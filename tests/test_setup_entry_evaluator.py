@@ -24,7 +24,8 @@ class SetupEntryEvaluatorTests(unittest.TestCase):
             {"confirmed": False}, {"signal": "NEUTRAL"},
         )
         self.assertEqual(result["stage_1"]["category"], "REVERSAL CANDIDATE")
-        self.assertEqual(result["momentum_label"], "EARLY_REVERSAL")
+        self.assertEqual(result["momentum_label"], "EARLY REVERSAL")
+        self.assertEqual(result["stage_2"]["status"], "WAIT")
         self.assertFalse(result["stage_2"]["eligible"])
 
     def test_reversal_requires_every_confirmation(self):
@@ -34,4 +35,23 @@ class SetupEntryEvaluatorTests(unittest.TestCase):
         )
         self.assertEqual(result["stage_1"]["category"], "REVERSAL CANDIDATE")
         self.assertTrue(result["stage_2"]["eligible"])
+        self.assertEqual(result["stage_2"]["status"], "TRADE_ELIGIBLE")
         self.assertEqual(result["stage_2"]["missing"], [])
+
+    def test_reversal_setup_requires_good_reward_risk(self):
+        result = SetupEntryEvaluator.evaluate(
+            frame(False), SimpleNamespace(score=50), {"support": 98, "risk_reward": 1.2},
+            {"confirmed": False}, {"signal": "NEUTRAL"},
+        )
+        self.assertNotEqual(result["stage_1"]["category"], "REVERSAL CANDIDATE")
+        self.assertFalse(result["stage_1"]["evidence"]["risk_reward_at_least_1_5"])
+
+    def test_higher_low_is_not_an_extra_entry_gate(self):
+        data = frame(True)
+        data["Low"] = [99.5, 99.4, 99.3, 99.2, 99.1, 99.0, 98.9, 98.8]
+        result = SetupEntryEvaluator.evaluate(
+            data, SimpleNamespace(score=65), {"support": 98, "risk_reward": 2},
+            {"confirmed": False}, {"signal": "BUY"},
+        )
+        self.assertTrue(result["stage_2"]["eligible"])
+        self.assertNotIn("higher_low", result["stage_2"]["checks"])

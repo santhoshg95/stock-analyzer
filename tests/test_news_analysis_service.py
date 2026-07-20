@@ -1,9 +1,11 @@
 """Regression coverage for the explainable news-analysis integration."""
 
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from src.news.analysis_service import NewsAnalysisService
+from src.news.ai_sentiment import AISentimentAnalyzer, AISentimentError
 
 
 RSS = b"""<rss><channel>
@@ -14,15 +16,70 @@ RSS = b"""<rss><channel>
 
 class NewsAnalysisServiceTests(unittest.TestCase):
     @patch("src.news.analysis_service.requests.get")
-    def test_bullish_headlines_produce_explainable_score(self, get):
+    def test_ai_bullish_assessment_is_used_without_keyword_scoring(self, get):
         response = Mock(content=RSS)
         response.raise_for_status.return_value = None
         get.return_value = response
 
-        result = NewsAnalysisService.analyze("SBIN")
+        analyzer = Mock(model="test-model")
+        analyzer.analyze.return_value = {
+            "sentiment": "BULLISH", "score": 72, "confidence": 91,
+            "materiality": "HIGH", "events": ["EARNINGS_BEAT"],
+            "reasoning": ["Results exceeded stated expectations."], "trade_impact": "SUPPORTIVE",
+            "article_assessments": [], "analysis_provider": "LOCAL_FINBERT_SPACY",
+        }
+        result = NewsAnalysisService.analyze("SBIN", analyzer=analyzer)
 
         self.assertTrue(result["available"])
         self.assertEqual(result["sentiment"], "BULLISH")
         self.assertGreater(result["score"], 0)
         self.assertEqual(result["article_count"], 2)
         self.assertEqual(len(result["headlines"]), 2)
+        self.assertEqual(result["analysis_method"], "LOCAL_FINBERT_SPACY")
+        analyzer.analyze.assert_called_once()
+
+    @patch("src.news.analysis_service.requests.get")
+    def test_ai_failure_is_unavailable_not_keyword_fallback(self, get):
+        response = Mock(content=RSS)
+        response.raise_for_status.return_value = None
+        get.return_value = response
+        analyzer = Mock(model="test-model")
+        analyzer.analyze.side_effect = AISentimentError("provider unavailable")
+
+        result = NewsAnalysisService.analyze("SBIN", analyzer=analyzer)
+
+        self.assertFalse(result["available"])
+        self.assertEqual(result["sentiment"], "NEUTRAL")
+        self.assertEqual(result["score"], 0)
+        self.assertEqual(result["analysis_method"], "AI_UNAVAILABLE")
+
+    def test_local_finbert_and_spacy_analyze_without_paid_api(self):
+        sentiment_pipeline = Mock(return_value=[
+            {"label": "positive", "score": 0.82},
+            {"label": "negative", "score": 0.05},
+            {"label": "neutral", "score": 0.13},
+        ])
+        nlp = Mock(return_value=SimpleNamespace(ents=[
+            SimpleNamespace(text="State Bank of India", label_="ORG"),
+        ]))
+        analyzer = AISentimentAnalyzer(
+            model="test-finbert",
+            spacy_model="test-spacy",
+            sentiment_pipeline=sentiment_pipeline,
+            nlp=nlp,
+        )
+
+        result = analyzer.analyze("SBIN", [{
+            "title": "State Bank of India reports results",
+            "description": "Quarterly performance exceeded expectations.",
+        }])
+
+        self.assertEqual(result["sentiment"], "BULLISH")
+        self.assertEqual(result["analysis_provider"], "LOCAL_FINBERT_SPACY")
+        self.assertEqual(result["entities"][0]["text"], "State Bank of India")
+        sentiment_pipeline.assert_called_once_with(
+            "State Bank of India reports results Quarterly performance exceeded expectations.",
+            top_k=None,
+            truncation=True,
+        )
+        nlp.assert_called_once()

@@ -62,8 +62,20 @@ class SupportResistanceEngine:
         # ----------------------------------------------------
 
         above_price = [r for r in resistances if r > latest_close]
+        below_resistance = [r for r in resistances if r <= latest_close]
 
-        nearest_resistance = min(above_price) if above_price else None
+        # Keep the complete ordered ladder.  A nearby level is an obstacle,
+        # not necessarily the end of the move when a breakout is credible.
+        raw_resistance_levels = sorted({round(float(level), 4) for level in above_price})
+        atr = float(df.iloc[-1].get("ATR", 0) or 0)
+        zone_width = max(latest_close * .005, atr * .5)
+        resistance_levels = []
+        for level in raw_resistance_levels:
+            if not resistance_levels or level - resistance_levels[-1] >= zone_width:
+                resistance_levels.append(level)
+        nearest_resistance = resistance_levels[0] if resistance_levels else None
+        next_resistance = resistance_levels[1] if len(resistance_levels) > 1 else None
+        broken_resistance = max(below_resistance) if below_resistance else None
 
         # ----------------------------------------------------
         # Distance Calculations
@@ -92,6 +104,12 @@ class SupportResistanceEngine:
             "support": nearest_support,
 
             "resistance": nearest_resistance,
+
+            "next_resistance": next_resistance,
+
+            "resistance_levels": resistance_levels,
+
+            "broken_resistance": broken_resistance,
 
             "support_distance": support_distance,
 

@@ -5,6 +5,10 @@ All configurable thresholds used by the AI Trading Assistant.
 Changing a value here affects the entire application.
 """
 
+import os
+
+EQUITY_MIN_RISK_REWARD = float(os.getenv("EQUITY_MIN_RISK_REWARD", "1.5"))
+
 # ==========================================================
 # Trend
 # ==========================================================

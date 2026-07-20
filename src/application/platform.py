@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
 import re
+import logging
 from time import sleep
 from threading import Lock
 from typing import Any
@@ -31,15 +32,21 @@ from src.data_provider.kite_data_provider import KiteDataProvider
 from src.indicators.pipeline import IndicatorPipeline
 from src.position_sizing.position_size import PositionSizingEngine
 from src.options.engine.option_engine import OptionEngine
-from src.options.kite_option_chain import KiteOptionChainProvider
+from src.options.kite_option_chain import (
+    KiteOptionChainProvider, OptionInstrumentLookupError, OptionQuoteUnavailableError,
+)
 from src.options.trade_builder import OptionTradeBuilder
 from src.options.entry_validator import OptionEntryValidator
+from src.options.short_put import ShortPutStrategyEngine
+from src.sector.sector_mapper import SectorMapper
 from src.trade_plan.trade_plan import TradePlanEngine
 from src.trading_engine.engine import TradingEngine
 from src.workflow.daily_trading_assistant import DailyTradingAssistant
 from src.learning.outcome_repository import OutcomeRepository
 from src.historical.current_month_seasonality import CurrentMonthSeasonality
 from src.historical.regime_performance import RegimePerformance
+
+logger = logging.getLogger(__name__)
 
 
 class TradingPlatform:
@@ -82,6 +89,21 @@ class TradingPlatform:
         if isinstance(value, pd.Timestamp):
             return value.isoformat()
         return value
+
+    @staticmethod
+    def _option_direction(candidate: dict[str, Any]) -> str:
+        """Derive derivative direction from the underlying, not WATCH status."""
+        trend = str(candidate.get("analysis_report", {}).get("analysis", {}).get("trend", "")).upper()
+        if "BULLISH" in trend:
+            return "BULLISH"
+        if "BEARISH" in trend:
+            return "BEARISH"
+        action = str(candidate.get("action", "")).upper()
+        if action in {"BUY", "BUY ON DIP"}:
+            return "BULLISH"
+        if action in {"SELL", "SHORT"}:
+            return "BEARISH"
+        return "NEUTRAL"
 
     @staticmethod
     def _stock_liquidity(analysis: dict[str, Any]) -> dict[str, Any]:
@@ -135,11 +157,13 @@ class TradingPlatform:
         try:
             report = self.engine.analyze(symbol)
         except TokenException as exc:
+            logger.error("Option authentication failed for %s: %s", candidate["symbol"], exc)
             raise AuthenticationError(
                 "Zerodha Kite authentication failed. Update KITE_API_KEY and "
                 "generate a fresh KITE_ACCESS_TOKEN before running the platform."
             ) from exc
         except RequestException as exc:
+            logger.error("Option network request failed for %s: %s", candidate["symbol"], exc)
             raise DataUnavailableError(
                 "Unable to reach Zerodha Kite. Check your network connection and try again."
             ) from exc
@@ -265,6 +289,12 @@ class TradingPlatform:
                 "setup_evaluation": report["setup_evaluation"],
                 "reason": decision["reason"],
                 "trade_plan": report["trade_plan"],
+                "entry_report": report["entry"],
+                "analysis_report": {
+                    "analysis": report["analysis"], "entry": report["entry"],
+                    "breakout": report["breakout"], "candlestick": report["candlestick"],
+                    "setup_evaluation": report["setup_evaluation"],
+                },
                 "position_size": report["position_size"],
             }
 
@@ -338,8 +368,71 @@ class TradingPlatform:
             chain = self._option_chain_provider.get_chain(
                 candidate["symbol"], candidate["current_price"]
             )
-            analysis = OptionEngine().analyze(chain)
-            direction = "BULLISH" if candidate["action"] in {"BUY", "BUY ON DIP"} else "BEARISH"
+            short_put = {"available": False, "rejection_code": "STRATEGY_MODE_DISABLED",
+                         "rejection_reasons": ["Short-Put mode is disabled."]}
+            if self.settings.trading_strategy_mode in {"short_put", "both"}:
+                chains = self._option_chain_provider.get_chains(
+                    candidate["symbol"], candidate["current_price"],
+                    self.settings.short_put_min_dte, self.settings.short_put_max_dte,
+                )
+                portfolio = self.paper_broker.portfolio()
+                invested = float(portfolio.get("invested_cost", 0))
+                candidate_sector = SectorMapper().get_sector(candidate["symbol"])
+                sector_invested = sum(
+                    float(position.get("quantity", 0)) * float(position.get("average_price", 0))
+                    for position in portfolio.get("positions", [])
+                    if SectorMapper().get_sector(position.get("symbol", "")) == candidate_sector
+                )
+                exposure = {
+                    "portfolio_exposure_percent": invested / self.settings.capital * 100,
+                    "sector_exposure_percent": sector_invested / self.settings.capital * 100,
+                    "correlated_exposure_percent": None,
+                    "available_capital": min(self.settings.option_capital, float(portfolio.get("cash", self.settings.option_capital))),
+                    "broker_margin_available": False,
+                }
+                short_put = ShortPutStrategyEngine.evaluate(
+                    candidate["symbol"], candidate["analysis_report"], chains, self.settings,
+                    exposure_context=exposure,
+                )
+                if short_put.get("available") and short_put.get("strategy") == "BULL_PUT_SPREAD":
+                    legs = [short_put.get("sold_leg"), short_put.get("hedge_leg")]
+                    try:
+                        orders = [{
+                            "exchange": "NFO", "tradingsymbol": leg["symbol"],
+                            "transaction_type": leg["side"], "variety": "regular",
+                            "product": "NRML", "order_type": "LIMIT", "quantity": leg["quantity"],
+                            "price": leg["premium"],
+                        } for leg in legs if leg]
+                        margin = self.provider.provider.kite.basket_order_margins(orders, consider_positions=True)
+                        total_margin = float((margin.get("final") or {}).get("total") or 0)
+                        if total_margin > 0 and short_put.get("lots", 0) > 0:
+                            exposure["broker_margin_per_lot"] = total_margin / short_put["lots"]
+                            exposure["broker_margin_available"] = True
+                            short_put = ShortPutStrategyEngine.evaluate(
+                                candidate["symbol"], candidate["analysis_report"], chains, self.settings,
+                                exposure_context=exposure,
+                            )
+                    except (TokenException, RequestException, KeyError, TypeError, ValueError, AttributeError) as exc:
+                        logger.warning("Broker margin unavailable for %s: %s: %s",
+                                       candidate["symbol"], exc.__class__.__name__, exc)
+            direction = self._option_direction(candidate)
+            analysis = OptionEngine().analyze(chain, direction=direction)
+            if direction == "NEUTRAL":
+                return self._serialize({
+                    "available": False,
+                    "reason": "Underlying direction is not confirmed.",
+                    "strategy": "Wait",
+                    "analysis_strategy": analysis.suggested_strategy,
+                    "confidence": analysis.confidence,
+                    "pcr": analysis.pcr,
+                    "rejection": {"code": "DIRECTION_UNCONFIRMED", "category": "SETUP",
+                                  "reason": "Underlying direction is not confirmed."},
+                    "short_put": short_put,
+                    "option_decision": {
+                        "direction": direction, "selected": "Wait", "candidates": [],
+                        "equity_independent": True,
+                    },
+                })
             trade = OptionTradeBuilder.build(
                 chain,
                 analysis.suggested_strategy or "Wait",
@@ -354,11 +447,28 @@ class TradingPlatform:
             if trade["available"] and not validation["approved"]:
                 rejection = {"code": "ENTRY_VALIDATION_FAILED", "category": "EXECUTION",
                              "reason": "; ".join(validation["reasons"])}
+            candidates = [{
+                "strategy": trade["strategy"],
+                "available": bool(trade["available"] and validation["approved"]),
+                "source": "DIRECTIONAL_OPTION_ENGINE",
+            }]
+            if short_put.get("strategy"):
+                candidates.append({
+                    "strategy": short_put["strategy"],
+                    "available": bool(short_put.get("available")),
+                    "source": "SHORT_PUT_ENGINE",
+                    "rejection_code": short_put.get("rejection_code"),
+                })
+            selected_strategy = next(
+                (item["strategy"] for item in candidates if item["available"]), "Wait"
+            )
             return self._serialize({
                 "available": trade["available"],
                 "reason": trade.get("reason"),
                 "expiry": chain.expiry,
-                "strategy": analysis.suggested_strategy,
+                "strategy": trade["strategy"],
+                "analysis_strategy": analysis.suggested_strategy,
+                "direction": direction,
                 "confidence": analysis.confidence,
                 "pcr": analysis.pcr,
                 "max_pain": analysis.max_pain,
@@ -368,6 +478,13 @@ class TradingPlatform:
                 "trade": trade,
                 "entry_validation": validation,
                 "rejection": rejection,
+                "short_put": short_put,
+                "option_decision": {
+                    "direction": direction,
+                    "selected": selected_strategy,
+                    "candidates": candidates,
+                    "equity_independent": True,
+                },
             })
         except TokenException as exc:
             return {"available": False, "error_type": "AUTHENTICATION",
@@ -377,11 +494,25 @@ class TradingPlatform:
             return {"available": False, "error_type": "NETWORK",
                     "rejection": {"code": "NETWORK_FAILED", "category": "DATA", "reason": f"Kite network error: {exc}"},
                     "reason": f"Kite network error: {exc}", "reasons": []}
+        except OptionInstrumentLookupError as exc:
+            logger.warning("Option instrument lookup failed for %s: %s", candidate["symbol"], exc)
+            return {"available": False, "error_type": "INSTRUMENT_LOOKUP",
+                    "rejection": {"code": "OPTION_DATA_UNAVAILABLE", "category": "DATA", "reason": str(exc)},
+                    "reason": str(exc), "reasons": [], "short_put": {"available": False,
+                    "rejection_code": "OPTION_DATA_UNAVAILABLE", "rejection_reasons": [str(exc)]}}
+        except OptionQuoteUnavailableError as exc:
+            logger.warning("Option quote unavailable for %s: %s", candidate["symbol"], exc)
+            return {"available": False, "error_type": "QUOTE_UNAVAILABLE",
+                    "rejection": {"code": "OPTION_DATA_UNAVAILABLE", "category": "DATA", "reason": str(exc)},
+                    "reason": str(exc), "reasons": [], "short_put": {"available": False,
+                    "rejection_code": "OPTION_DATA_UNAVAILABLE", "rejection_reasons": [str(exc)]}}
         except ValueError as exc:
+            logger.warning("Invalid option data for %s: %s", candidate["symbol"], exc)
             return {"available": False, "error_type": "OPTION_DATA",
                     "rejection": {"code": "OPTION_DATA_INVALID", "category": "DATA", "reason": str(exc)},
                     "reason": str(exc), "reasons": []}
         except Exception as exc:
+            logger.exception("Unexpected option provider error for %s", candidate["symbol"])
             return {"available": False, "error_type": exc.__class__.__name__,
                     "rejection": {"code": "OPTION_PROVIDER_ERROR", "category": "DATA", "reason": repr(exc)},
                     "reason": repr(exc), "reasons": []}

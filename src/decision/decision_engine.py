@@ -74,7 +74,7 @@ class DecisionEngine:
 
                 "confidence": 70,
 
-                "reason": "Oversold reversal candidate; wait for candle, higher-low, volume and EMA20 confirmation."
+                "reason": "Oversold reversal candidate; wait for a bullish candle, volume above 1.2x, EMA20 recovery, and MACD confirmation."
 
             }
 
