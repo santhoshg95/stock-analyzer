@@ -54,8 +54,9 @@ def suggestions(limit: int = 5, minimum_score: int = 40):
 
 
 @app.get("/daily-report")
-def daily_report(limit: int = 5, minimum_score: int = 40):
-    return _call(lambda: platform.daily_report(limit, minimum_score))
+def daily_report(limit: int = 5, minimum_score: int = 40,
+                 option_month: str | None = None):
+    return _call(lambda: platform.daily_report(limit, minimum_score, option_month))
 
 
 @app.post("/backtest")

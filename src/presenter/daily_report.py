@@ -19,7 +19,8 @@ class DailyReportPresenter:
         rows = [line, "                    AI TRADING ASSISTANT", line,
                 f"DATE                 : {report['date']}",
                 f"MARKET               : {market['regime']}",
-                f"MARKET CONFIDENCE    : {market['confidence']}%", line]
+                f"MARKET CONFIDENCE    : {market['confidence']}%",
+                f"RANKING MODE         : {report.get('ranking_mode', 'EXPECTED_VALUE')}", line]
         for trade in [*report["trades"], *report.get("watchlist", [])]:
             levels, risk = trade["levels"], trade["risk"]
             rows.extend([
@@ -29,7 +30,8 @@ class DailyReportPresenter:
                 f"Sector               : {trade['sector']}",
                 f"Current price        : {cls._money(trade['current_price'])}",
                 f"AI score             : {trade['ai_score']}/100",
-                f"Confidence grade     : {trade.get('confidence_grade', {}).get('grade', 'N/A')} — {trade.get('confidence_grade', {}).get('label', 'Unrated')}",
+                f"Quality grade        : {trade.get('quality_grade', 'N/A')} — {trade.get('quality_label', 'Unrated')}",
+                f"Quality score        : {trade.get('quality_score', 0)}/100",
                 f"News sentiment       : {trade['news']['sentiment']} ({trade['news']['score']:+.1f})",
                 f"News collection      : {trade['news'].get('collection_state', 'UNKNOWN')} ({trade['news'].get('article_count', 0)} articles)",
                 f"News sentiment state : {trade['news'].get('analysis_state', 'UNKNOWN')}",
@@ -52,12 +54,40 @@ class DailyReportPresenter:
                 f"Expected reward      : {cls._money(levels.get('expected_reward'))} (nearest target {cls._money(levels.get('nearest_target_reward'))})",
                 f"Expected risk/reward : 1:{levels['risk_reward']}",
                 f"Expected value       : {cls._money(trade.get('expected_value', {}).get('amount'))} ({trade.get('expected_value', {}).get('risk_multiple', 0):+.3f}R)",
-                f"Trade readiness      : {trade['trade_readiness']['percentage']}% — {trade['trade_readiness']['classification']}",
-                f"Adaptive policy      : {trade.get('market_policy', {}).get('profile', 'N/A')} — score {trade.get('market_policy', {}).get('trade_score_minimum', 'N/A')}+, readiness {trade.get('market_policy', {}).get('readiness_minimum', 'N/A')}%+",
+                f"Execution readiness  : {trade['execution_readiness_score']}% — {trade['execution_status']} ({trade['execution_label']})",
+                f"Execution policy     : {trade['trade_readiness'].get('policy', 'N/A')} — execute at {trade['trade_readiness'].get('execute_threshold', 'N/A')}%",
                 f"Position size        : {risk['quantity']} shares (max risk {cls._money(risk['risk_amount'])})",
                 f"Risk scaling         : {trade['risk_policy']['position_scale'] * 100:.0f}% position; {trade['risk_policy']['effective_risk_percent']}% effective risk",
                 f"Option account       : {cls._money(trade['option_budget_policy']['capital_available'])} capital; {cls._money(trade['option_budget_policy']['risk_per_trade'])} max risk/trade",
+                f"Option execution     : {trade.get('option_context', {}).get('execution', 'UNAVAILABLE')}",
+                f"Option context       : {trade.get('option_directional_support', 'NEUTRAL')} — score adjustment only",
             ])
+            event = trade.get("event_risk", {})
+            rows.extend([
+                "EVENT RISK", "-" * 68,
+                f"Risk level            : {event.get('event_risk_level', 'UNAVAILABLE')} — {event.get('event_risk_score', 0)}/100",
+                f"Event direction       : {event.get('event_direction', 'UNCERTAIN')}",
+                f"Company type          : {event.get('company_type', 'UNKNOWN')}",
+                f"Confidence / freshness: {event.get('event_confidence', 0)}% / {event.get('data_state', 'UNAVAILABLE')}",
+                f"Primary category      : {event.get('primary_category', 'NONE')}",
+                f"Impact / decay        : {event.get('impact_duration', 'N/A')} / {event.get('decay_model', 'N/A')} ({event.get('current_decay_factor', 1):.2f})",
+                f"Overnight gap risk    : {event.get('gap_risk_score', 0)}/100",
+                f"Overnight hold        : {'ALLOWED' if trade.get('overnight_hold_allowed', True) else 'BLOCKED'}",
+                f"Base readiness        : {event.get('base_readiness', trade.get('execution_readiness_score', 0))}%",
+                f"Directional bonus     : +{event.get('directional_bonus', 0)}",
+                f"Volatility penalty    : -{event.get('volatility_penalty', 0)}",
+                f"Gap-risk penalty      : -{event.get('gap_risk_penalty', 0)}",
+                f"Uncertainty penalty   : -{event.get('uncertainty_penalty', 0)}",
+                f"Adjusted readiness    : {event.get('adjusted_readiness', trade.get('execution_readiness_score', 0))}%",
+                f"Event position scale  : {event.get('position_size_multiplier', 1) * 100:.0f}%",
+                f"Base / final position : {risk.get('base_market_adjusted_quantity', risk['quantity'])} / {risk['quantity']} shares",
+                f"Strategy restriction  : {', '.join(trade.get('strategy_restrictions', [])) or 'NONE'}",
+                f"Final action          : {trade.get('final_action', trade['action'])}",
+            ])
+            for matched in event.get("matched_events", [])[:4]:
+                rows.append(f"  ✓ {matched.get('title')} ({matched.get('candidate_event_score', 0)}/100)")
+            for warning in event.get("warnings", [])[:2]:
+                rows.append(f"  ! {warning}")
             seasonal = trade.get("current_month_seasonality", {})
             rows.append(
                 f"{seasonal.get('month_name', 'Month')} history        : "
@@ -104,7 +134,8 @@ class DailyReportPresenter:
             if trade["status"] == "WATCHLIST":
                 readiness = trade["trade_readiness"]
                 for check in readiness["checks"]:
-                    rows.append(f"  {'✓' if check['passed'] else '✗'} {check['name']}: {check['detail']}")
+                    marker = "–" if not check.get("counted", True) else "✓" if check["passed"] else "✗"
+                    rows.append(f"  {marker} {check['name']}: {check['detail']}")
             for diagnostic in levels.get("target_diagnostics", []):
                 rows.append(f"Target diagnostic    : {diagnostic}")
             short_put = trade.get("short_put_strategy", {})
@@ -187,6 +218,14 @@ class DailyReportPresenter:
             f"Option-confirmed     : {summary.get('option_confirmed', 0)}",
             f"Conflicts rejected   : {summary.get('conflicts_rejected', 0)}",
             f"Trades generated     : {summary['trades_generated']}",
+            f"Event-risk reviewed  : {summary.get('event_risk_reviewed', 0)}",
+            f"Event risk V/L/M/H/X : {summary.get('event_risk_very_low', 0)}/{summary.get('event_risk_low', 0)}/{summary.get('event_risk_medium', 0)}/{summary.get('event_risk_high', 0)}/{summary.get('event_risk_extreme', 0)}",
+            f"Event blocked        : {summary.get('event_blocked_candidates', 0)}",
+            f"Event size reduced   : {summary.get('event_reduced_positions', 0)}",
+            f"Overnight blocked    : {summary.get('overnight_blocked_candidates', 0)}",
+            f"Event data unavailable: {summary.get('event_data_unavailable', 0)}",
+            f"Common event category: {summary.get('common_event_category', 'N/A')}",
+            f"Highest event risk   : {summary.get('highest_risk_candidate', 'N/A')}",
             f"Short Put reviewed   : {summary.get('short_put_reviewed', 0)}",
             f"Short Put approved   : {summary.get('short_put_approved', 0)}",
             f"Cash-secured approved: {summary.get('cash_secured_put_approved', 0)}",
@@ -213,6 +252,8 @@ class DailyReportPresenter:
             line,
             "CONTEXT REVIEW", "-" * 68,
             *[f"{name:<20}: {values['passed']} passed / {values['failed']} failed / {values['unavailable']} unavailable"
+              + (f" / {values['fetched']} fetched / {values['analysis_failed']} analysis failed"
+                 if name == "news" else "")
               for name, values in report.get("context_statistics", {}).items()],
             line,
             "SECTOR RANKING", "-" * 68,

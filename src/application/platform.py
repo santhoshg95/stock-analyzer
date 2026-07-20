@@ -241,13 +241,13 @@ class TradingPlatform:
             return []
         return sorted(path.name.removesuffix(".NS.csv") for path in Path(DATA_FOLDER).glob("*.NS.csv"))
 
-    def enrich_candidate(self, candidate: dict[str, Any]) -> dict[str, Any]:
+    def enrich_candidate(self, candidate: dict[str, Any], option_month: str | None = None) -> dict[str, Any]:
         """Add expensive long-history and option context to one finalist."""
         candidate = deepcopy(candidate)
         historical = self._historical_context(candidate["symbol"])
         candidate["current_month_seasonality"] = historical["current_month"]
         candidate["regime_history"] = historical["regime"]
-        candidate["options"] = self._option_trade_plan(candidate)
+        candidate["options"] = self._option_trade_plan(candidate, option_month)
         option_confidence = candidate["options"].get("confidence", 0)
         candidate["probability"] = round(min(
             95,
@@ -394,20 +394,20 @@ class TradingPlatform:
             ),
         }
 
-    def _option_trade_plan(self, candidate: dict[str, Any]) -> dict[str, Any]:
+    def _option_trade_plan(self, candidate: dict[str, Any], option_month: str | None = None) -> dict[str, Any]:
         key = (
             candidate["symbol"], round(float(candidate["current_price"]), 1),
-            self.settings.trading_strategy_mode,
+            self.settings.trading_strategy_mode, option_month,
         )
         with self._option_cache_lock:
             cached = self._option_cache.get(key)
             if cached and monotonic() - cached[0] < self._option_cache_ttl_seconds:
                 return deepcopy(cached[1])
-            result = self._option_trade_plan_uncached(candidate)
+            result = self._option_trade_plan_uncached(candidate, option_month)
             self._option_cache[key] = (monotonic(), deepcopy(result))
             return result
 
-    def _option_trade_plan_uncached(self, candidate: dict[str, Any]) -> dict[str, Any]:
+    def _option_trade_plan_uncached(self, candidate: dict[str, Any], option_month: str | None = None) -> dict[str, Any]:
         """Enrich only final candidates with live option-chain intelligence."""
         if self.settings.market_data_source != "kite":
             return {"available": False, "error_type": "DATA_SOURCE",
@@ -424,7 +424,7 @@ class TradingPlatform:
                     self.provider.provider.kite, instruments=instruments
                 )
             chain = self._option_chain_provider.get_chain(
-                candidate["symbol"], candidate["current_price"]
+                candidate["symbol"], candidate["current_price"], expiry_month=option_month
             )
             short_put = {"available": False, "rejection_code": "STRATEGY_MODE_DISABLED",
                          "rejection_reasons": ["Short-Put mode is disabled."]}
@@ -432,6 +432,7 @@ class TradingPlatform:
                 chains = self._option_chain_provider.get_chains(
                     candidate["symbol"], candidate["current_price"],
                     self.settings.short_put_min_dte, self.settings.short_put_max_dte,
+                    expiry_month=option_month,
                 )
                 portfolio = self.paper_broker.portfolio()
                 invested = float(portfolio.get("invested_cost", 0))
@@ -622,7 +623,8 @@ class TradingPlatform:
     def portfolio(self) -> dict[str, Any]:
         return self._serialize(self.paper_broker.portfolio())
 
-    def daily_report(self, limit: int = 5, minimum_score: int = 40) -> dict[str, Any]:
+    def daily_report(self, limit: int = 5, minimum_score: int = 40,
+                     option_month: str | None = None) -> dict[str, Any]:
         """Generate the final ranked daily trade report.
 
         This is a research/paper-trading recommendation only.  It never sends
@@ -632,7 +634,12 @@ class TradingPlatform:
             raise ValidationError("limit must be an integer between 1 and 20")
         if not isinstance(minimum_score, int) or not 0 <= minimum_score <= 100:
             raise ValidationError("minimum_score must be an integer between 0 and 100")
-        return self._serialize(DailyTradingAssistant(self).generate(limit, minimum_score))
+        if option_month is not None:
+            if not isinstance(option_month, str) or not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", option_month):
+                raise ValidationError("option_month must use YYYY-MM format")
+        return self._serialize(
+            DailyTradingAssistant(self, option_month=option_month).generate(limit, minimum_score)
+        )
 
     def record_trade_outcome(self, recommendation_id: str, won: bool,
                              return_percent: float | None = None,
