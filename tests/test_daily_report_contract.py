@@ -10,6 +10,11 @@ from src.workflow.daily_trading_assistant import DailyTradingAssistant
 
 
 class DailyReportContractTests(unittest.TestCase):
+    def test_null_short_put_candidate_is_normalized(self):
+        self.assertEqual(
+            DailyTradingAssistant._short_put_candidate({"candidate": None}), {}
+        )
+
     def test_unavailable_context_is_omitted_from_weighted_score(self):
         score = DailyTradingAssistant._available_weighted_score([
             (80, .55, True), (20, .10, False), (60, .05, True),
@@ -34,6 +39,9 @@ class DailyReportContractTests(unittest.TestCase):
         self.assertIn("sector_ranking", report)
         self.assertIn("timings", report)
         self.assertIn("total_seconds", report["timings"])
+        self.assertIn("news_model_load_seconds", report["timings"])
+        self.assertIn("news_inference_seconds", report["timings"])
+        self.assertIn("news_network_seconds", report["timings"])
         self.assertLessEqual(report["timings"]["candidates_enriched"], 6)
         self.assertEqual(report["timings"]["news_stocks_requested"], 0)
         self.assertEqual(

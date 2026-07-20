@@ -3,9 +3,61 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
+import logging
+from pathlib import Path
 from statistics import mean
 from threading import RLock
+from time import perf_counter
 from typing import Any
+
+
+logger = logging.getLogger(__name__)
+
+
+def _cached_safetensors_snapshots(model_name: str) -> list[Path]:
+    """Return local snapshots with safe weights without contacting the Hub."""
+    cache_root = Path(os.getenv("HF_HUB_CACHE", Path(os.getenv("HF_HOME", Path.home() / ".cache/huggingface")) / "hub"))
+    repository = "models--" + model_name.replace("/", "--")
+    snapshots = cache_root / repository / "snapshots"
+    return sorted(
+        {path.parent for path in snapshots.glob("*/model.safetensors")},
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    ) if snapshots.exists() else []
+
+
+@lru_cache(maxsize=1)
+def get_finbert_pipeline(model_name: str):
+    """Build exactly one local-first FinBERT pipeline per Python process."""
+    from transformers import (
+        AutoConfig, AutoModelForSequenceClassification, AutoTokenizer, pipeline,
+    )
+
+    cache_root = Path(os.getenv("HF_HUB_CACHE", Path(os.getenv("HF_HOME", Path.home() / ".cache/huggingface")) / "hub"))
+    repository_path = cache_root / ("models--" + model_name.replace("/", "--"))
+    if not repository_path.exists():
+        # Only a genuinely absent cache may use the network. Once the cache
+        # exists every subsequent process takes the strict local path below.
+        return pipeline("text-classification", model=model_name, tokenizer=model_name)
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
+    config = AutoConfig.from_pretrained(model_name, local_files_only=True)
+    try:
+        model = AutoModelForSequenceClassification.from_pretrained(
+            model_name, config=config, local_files_only=True
+        )
+    except (OSError, ValueError):
+        # Some transformers versions reject legacy pytorch_model.bin files.
+        # A safetensors conversion may already exist in another cached revision;
+        # resolve it directly from disk instead of querying Hub commits/PRs.
+        snapshots = _cached_safetensors_snapshots(model_name)
+        if not snapshots:
+            raise
+        model = AutoModelForSequenceClassification.from_pretrained(
+            snapshots[0], config=config, local_files_only=True
+        )
+    return pipeline("text-classification", model=model, tokenizer=tokenizer)
 
 
 class AISentimentError(RuntimeError):
@@ -23,18 +75,27 @@ class AISentimentAnalyzer:
         self._nlp = nlp
         self._model_lock = RLock()
 
-    def _load(self) -> None:
+    def load_finbert(self) -> float:
+        """Load the process-cached FinBERT pipeline without initializing spaCy."""
+        started = perf_counter()
+        loaded = False
         with self._model_lock:
             if self._sentiment_pipeline is None:
                 try:
-                    from transformers import pipeline
-                    self._sentiment_pipeline = pipeline(
-                        "text-classification", model=self.model, tokenizer=self.model,
-                    )
+                    self._sentiment_pipeline = get_finbert_pipeline(self.model)
+                    loaded = True
                 except (ImportError, OSError, RuntimeError) as exc:
                     raise AISentimentError(
-                        "FinBERT is unavailable. Install requirements and download the configured NEWS_FINBERT_MODEL."
+                        "FinBERT is not fully cached locally. Download NEWS_FINBERT_MODEL once before running the report."
                     ) from exc
+        elapsed = perf_counter() - started if loaded else 0.0
+        if loaded:
+            logger.info("FinBERT model load time: %.3fs (local cache)", elapsed)
+        return elapsed
+
+    def _load(self) -> float:
+        model_load_seconds = self.load_finbert()
+        with self._model_lock:
             if self._nlp is None:
                 try:
                     import spacy
@@ -43,6 +104,7 @@ class AISentimentAnalyzer:
                     raise AISentimentError(
                         f"spaCy model {self.spacy_model!r} is unavailable; run: python -m spacy download {self.spacy_model}"
                     ) from exc
+        return model_load_seconds
 
     @staticmethod
     def _probabilities(raw_result) -> dict[str, float]:
@@ -61,22 +123,44 @@ class AISentimentAnalyzer:
         return "BULLISH" if score >= 15 else "BEARISH" if score <= -15 else "NEUTRAL"
 
     def analyze(self, symbol: str, articles: list[dict[str, Any]]) -> dict[str, Any]:
-        self._load()
+        model_load_seconds = self._load()
         assessments, signed_scores, confidences, all_entities = [], [], [], []
+        usable = []
+        for article in articles:
+            article_text = " ".join(filter(None, (article.get("title"), article.get("description"))))
+            if article_text.strip():
+                usable.append((article, article_text))
         # The shared transformers/spaCy objects are reused across requests and
         # guarded because concurrent model inference is not reliably thread-safe.
         with self._model_lock:
-            for article in articles:
-                text = " ".join(filter(None, (article.get("title"), article.get("description"))))
-                if not text.strip():
-                    continue
-                probabilities = self._probabilities(
-                    self._sentiment_pipeline(text, top_k=None, truncation=True)
+            inference_started = perf_counter()
+            texts = [text for _, text in usable]
+            if not texts:
+                raw_results, documents = [], []
+            else:
+                raw_results = self._sentiment_pipeline(
+                    texts, top_k=None, truncation=True, batch_size=min(16, len(texts))
                 )
+                # A few lightweight test/custom pipelines only support scalar
+                # calls; retain that compatibility without penalizing the real
+                # transformers batch path.
+                if len(texts) == 1 and raw_results and isinstance(raw_results[0], dict):
+                    raw_results = [raw_results]
+                pipe = getattr(self._nlp, "pipe", None)
+                if callable(pipe):
+                    try:
+                        documents = list(pipe(texts, batch_size=min(32, len(texts))))
+                    except (TypeError, AttributeError):
+                        documents = [self._nlp(text) for text in texts]
+                else:
+                    documents = [self._nlp(text) for text in texts]
+                if len(documents) != len(texts):
+                    documents = [self._nlp(text) for text in texts]
+            for (article, text), raw_result, doc in zip(usable, raw_results, documents):
+                probabilities = self._probabilities(raw_result)
                 signed_score = (probabilities["positive"] - probabilities["negative"]) * 100
                 label = self._label(signed_score)
                 confidence = max(probabilities.values()) * 100
-                doc = self._nlp(text)
                 entities = [
                     {"text": entity.text, "label": entity.label_}
                     for entity in doc.ents if entity.text.strip()
@@ -92,6 +176,8 @@ class AISentimentAnalyzer:
                 })
                 signed_scores.append(signed_score)
                 confidences.append(confidence)
+            inference_seconds = perf_counter() - inference_started
+        logger.info("FinBERT inference time: %.3fs for %d articles", inference_seconds, len(usable))
         if not assessments:
             raise AISentimentError("No usable article text was available for local AI analysis")
 
@@ -116,4 +202,8 @@ class AISentimentAnalyzer:
             ],
             "trade_impact": trade_impact, "article_assessments": assessments,
             "entities": all_entities, "analysis_provider": "LOCAL_FINBERT_SPACY",
+            "timings": {
+                "model_load_seconds": round(model_load_seconds, 3),
+                "inference_seconds": round(inference_seconds, 3),
+            },
         }

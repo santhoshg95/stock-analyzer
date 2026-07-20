@@ -4,6 +4,8 @@ Kite Market Data Provider
 
 from datetime import date, timedelta
 from pathlib import Path
+from threading import Lock
+from time import monotonic, sleep
 
 import pandas as pd
 from kiteconnect import KiteConnect
@@ -15,6 +17,9 @@ from src.providers.base_provider import BaseProvider
 
 class KiteProvider(BaseProvider):
 
+    _instrument_tokens: dict[str, int] | None = None
+    _instrument_tokens_lock = Lock()
+
     def __init__(self):
 
         self.kite = KiteConnect(
@@ -24,6 +29,9 @@ class KiteProvider(BaseProvider):
         self.kite.set_access_token(
             Secrets.KITE_ACCESS_TOKEN
         )
+        self._historical_lock = Lock()
+        self._last_historical_request = 0.0
+        self._historical_min_interval = 0.34
 
     # -----------------------------------------------------
 
@@ -50,13 +58,13 @@ class KiteProvider(BaseProvider):
         symbol,
 
         period="1y",
-
-        interval="day"
+        interval="day",
+        from_date=None,
 
     ):
 
         instrument_token = self._instrument_token(symbol)
-        from_date = self._from_date(period)
+        from_date = from_date or self._from_date(period)
         kite_interval = {
             "1d": "day",
             "day": "day",
@@ -80,9 +88,19 @@ class KiteProvider(BaseProvider):
         max_days = 1999 if kite_interval == "day" else 100
         while chunk_start <= today:
             chunk_end = min(chunk_start + timedelta(days=max_days), today)
-            candles.extend(self.kite.historical_data(
-                instrument_token, chunk_start, chunk_end, kite_interval,
-            ))
+            # Pace the actual request rather than sleeping a fixed amount after
+            # an entire symbol has completed. Slow requests therefore consume
+            # their own rate-limit interval and add no unnecessary delay.
+            with self._historical_lock:
+                remaining = self._historical_min_interval - (
+                    monotonic() - self._last_historical_request
+                )
+                if remaining > 0:
+                    sleep(remaining)
+                self._last_historical_request = monotonic()
+                candles.extend(self.kite.historical_data(
+                    instrument_token, chunk_start, chunk_end, kite_interval,
+                ))
             chunk_start = chunk_end + timedelta(days=1)
         dataframe = pd.DataFrame(candles)
         if dataframe.empty:
@@ -117,8 +135,8 @@ class KiteProvider(BaseProvider):
             raise ValueError(f"Unsupported Kite period: {period}")
         return (pd.Timestamp.today().normalize() - offsets[period]).date()
 
-    @staticmethod
-    def _instrument_token(symbol: str) -> int:
+    @classmethod
+    def _instrument_token(cls, symbol: str) -> int:
         """Resolve an NSE equity token from the instrument-master reference file."""
         clean_symbol = symbol.upper().removesuffix(".NS")
         instrument_file = Path(__file__).resolve().parents[2] / "data" / "instruments.csv"
@@ -126,15 +144,25 @@ class KiteProvider(BaseProvider):
             raise FileNotFoundError(
                 "data/instruments.csv is required to resolve Kite instrument tokens"
             )
-        instruments = pd.read_csv(instrument_file, usecols=["instrument_token", "tradingsymbol", "exchange", "instrument_type"])
-        matches = instruments[
-            (instruments["exchange"] == "NSE")
-            & (instruments["instrument_type"] == "EQ")
-            & (instruments["tradingsymbol"] == clean_symbol)
-        ]
-        if matches.empty:
+        if cls._instrument_tokens is None:
+            with cls._instrument_tokens_lock:
+                if cls._instrument_tokens is None:
+                    instruments = pd.read_csv(
+                        instrument_file,
+                        usecols=["instrument_token", "tradingsymbol", "exchange", "instrument_type"],
+                    )
+                    equities = instruments[
+                        (instruments["exchange"] == "NSE")
+                        & (instruments["instrument_type"] == "EQ")
+                    ]
+                    cls._instrument_tokens = dict(zip(
+                        equities["tradingsymbol"].astype(str).str.upper(),
+                        equities["instrument_token"].astype(int),
+                    ))
+        token = cls._instrument_tokens.get(clean_symbol)
+        if token is None:
             raise ValueError(f"No NSE equity instrument token found for {clean_symbol}")
-        return int(matches.iloc[0]["instrument_token"])
+        return token
 
     # -----------------------------------------------------
 

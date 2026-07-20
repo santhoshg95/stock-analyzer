@@ -259,5 +259,26 @@
     "ai_score": 66.97,
     "estimated_probability": 68.96,
     "outcome": null
+  },
+  {
+    "id": "UNIONBANK-20260720135659827907",
+    "created_at": "2026-07-20T13:56:59.827927+00:00",
+    "symbol": "UNIONBANK",
+    "strategy": "Bull Call Spread",
+    "setup": "BREAKOUT",
+    "market_regime": "UNCERTAIN_BEARISH",
+    "sector": "DIVERSIFIED",
+    "direction": "BULLISH",
+    "ai_score": 79.31,
+    "estimated_probability": 91.55,
+    "option_strategy": "BULL_PUT_SPREAD",
+    "option_approved": true,
+    "option_expiry": "2026-07-28",
+    "option_strike": 165.0,
+    "option_delta": -0.10225669660980286,
+    "option_iv": 35.17,
+    "option_probability": 88.81,
+    "option_net_credit": 0.14,
+    "outcome": null
   }
 ]

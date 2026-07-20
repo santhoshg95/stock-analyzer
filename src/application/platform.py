@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 import re
 import logging
-from time import monotonic, perf_counter, sleep
+from time import monotonic, perf_counter
 from threading import Lock, RLock
 from typing import Any
 
@@ -70,6 +70,8 @@ class TradingPlatform:
         self._option_cache: dict[tuple, tuple[float, dict[str, Any]]] = {}
         self._option_cache_lock = RLock()
         self._option_cache_ttl_seconds = 120
+        self._analysis_cache: dict[str, dict[str, Any]] = {}
+        self._analysis_cache_lock = RLock()
 
     @staticmethod
     def _symbol(symbol: str) -> str:
@@ -158,6 +160,10 @@ class TradingPlatform:
 
     def analyze(self, symbol: str) -> dict[str, Any]:
         symbol = self._symbol(symbol)
+        with self._analysis_cache_lock:
+            cached = self._analysis_cache.get(symbol)
+            if cached is not None:
+                return deepcopy(cached)
         try:
             report = self.engine.analyze(symbol)
         except TokenException as exc:
@@ -181,7 +187,7 @@ class TradingPlatform:
             trade_plan.entry,
             trade_plan.stop_loss,
         )
-        return self._serialize({
+        result = self._serialize({
             "symbol": symbol,
             "analysis": report["analysis"],
             "entry": report["entry"],
@@ -193,6 +199,9 @@ class TradingPlatform:
             "trade_plan": trade_plan,
             "position_size": position_size,
         })
+        with self._analysis_cache_lock:
+            self._analysis_cache[symbol] = deepcopy(result)
+        return result
 
     def backtest(self, symbol: str) -> dict[str, Any]:
         symbol = self._symbol(symbol)
@@ -232,7 +241,31 @@ class TradingPlatform:
             return []
         return sorted(path.name.removesuffix(".NS.csv") for path in Path(DATA_FOLDER).glob("*.NS.csv"))
 
-    def suggest_stocks(self, limit: int = 5, minimum_score: int = 40) -> dict[str, Any]:
+    def enrich_candidate(self, candidate: dict[str, Any]) -> dict[str, Any]:
+        """Add expensive long-history and option context to one finalist."""
+        candidate = deepcopy(candidate)
+        historical = self._historical_context(candidate["symbol"])
+        candidate["current_month_seasonality"] = historical["current_month"]
+        candidate["regime_history"] = historical["regime"]
+        candidate["options"] = self._option_trade_plan(candidate)
+        option_confidence = candidate["options"].get("confidence", 0)
+        candidate["probability"] = round(min(
+            95,
+            candidate["technical_score"] * 0.6
+            + candidate["confidence"] * 0.25
+            + option_confidence * 0.15,
+        ), 2)
+        candidate["ai_reasoning"] = [
+            candidate["reason"],
+            f"Technical score: {candidate['technical_score']}/100.",
+            f"Risk/reward: {candidate['risk_reward']}:1.",
+            f"Candlestick: {candidate['candlestick']['pattern']} ({candidate['candlestick']['signal']}).",
+            *candidate["options"].get("reasons", []),
+        ]
+        return candidate
+
+    def suggest_stocks(self, limit: int = 5, minimum_score: int = 40,
+                       enrich: bool = True) -> dict[str, Any]:
         """Rank the configured stock universe and return actionable setups.
 
         A candidate must meet the score threshold and receive BUY, BUY ON DIP,
@@ -306,16 +339,9 @@ class TradingPlatform:
 
         candidates = []
         workers = 1 if self.settings.market_data_source == "kite" else min(8, len(symbols))
-        def rate_limited_evaluate(symbol: str) -> dict[str, Any] | None:
-            candidate = evaluate(symbol)
-            if self.settings.market_data_source == "kite":
-                # Kite historical-data calls are rate-limited; retain a margin.
-                sleep(0.35)
-            return candidate
-
         scan_started = perf_counter()
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = [executor.submit(rate_limited_evaluate, symbol) for symbol in symbols]
+            futures = [executor.submit(evaluate, symbol) for symbol in symbols]
             for future in as_completed(futures):
                 candidate = future.result()
                 if candidate:
@@ -335,33 +361,15 @@ class TradingPlatform:
         )
         top_candidates = candidates[:limit]
 
-        def enrich(candidate: dict[str, Any]) -> dict[str, Any]:
-            historical = self._historical_context(candidate["symbol"])
-            candidate["current_month_seasonality"] = historical["current_month"]
-            candidate["regime_history"] = historical["regime"]
-            candidate["options"] = self._option_trade_plan(candidate)
-            option_confidence = candidate["options"].get("confidence", 0)
-            candidate["probability"] = round(
-                min(95, candidate["technical_score"] * 0.6 + candidate["confidence"] * 0.25 + option_confidence * 0.15),
-                2,
-            )
-            candidate["ai_reasoning"] = [
-                candidate["reason"],
-                f"Technical score: {candidate['technical_score']}/100.",
-                f"Risk/reward: {candidate['risk_reward']}:1.",
-                f"Candlestick: {candidate['candlestick']['pattern']} ({candidate['candlestick']['signal']}).",
-                *candidate["options"].get("reasons", []),
-            ]
-            return candidate
-
         enrichment_started = perf_counter()
         # Only finalists are enriched. Two workers overlap independent I/O
         # without producing an aggressive burst against Kite's API limits.
-        if len(top_candidates) > 1:
-            with ThreadPoolExecutor(max_workers=min(2, len(top_candidates))) as executor:
-                top_candidates = list(executor.map(enrich, top_candidates))
-        else:
-            top_candidates = [enrich(candidate) for candidate in top_candidates]
+        if enrich:
+            if len(top_candidates) > 1:
+                with ThreadPoolExecutor(max_workers=min(2, len(top_candidates))) as executor:
+                    top_candidates = list(executor.map(self.enrich_candidate, top_candidates))
+            else:
+                top_candidates = [self.enrich_candidate(candidate) for candidate in top_candidates]
         enrichment_seconds = perf_counter() - enrichment_started
         logger.info("Historical/option enrichment: %.3fs for %d candidates",
                     enrichment_seconds, len(top_candidates))
@@ -408,7 +416,13 @@ class TradingPlatform:
                     "reason": "Option analysis requires MARKET_DATA_SOURCE=kite."}
         try:
             if self._option_chain_provider is None:
-                self._option_chain_provider = KiteOptionChainProvider(self.provider.provider.kite)
+                instruments = (
+                    self.provider.get_nfo_instruments()
+                    if hasattr(self.provider, "get_nfo_instruments") else None
+                )
+                self._option_chain_provider = KiteOptionChainProvider(
+                    self.provider.provider.kite, instruments=instruments
+                )
             chain = self._option_chain_provider.get_chain(
                 candidate["symbol"], candidate["current_price"]
             )

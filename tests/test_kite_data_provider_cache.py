@@ -7,8 +7,8 @@ class FakeKiteProvider:
     def __init__(self):
         self.calls = []
 
-    def get_historical_data(self, symbol, period="1y"):
-        self.calls.append((symbol, period))
+    def get_historical_data(self, symbol, period="1y", from_date=None):
+        self.calls.append((symbol, period) if from_date is None else (symbol, period, from_date))
         return pd.DataFrame(
             {"Open": [100.0], "High": [102.0], "Low": [99.0],
              "Close": [101.0], "Volume": [1000]},
@@ -38,3 +38,15 @@ def test_long_history_fetches_each_new_symbol_once(tmp_path):
     data.get_long_history("TCS", period="10y")
 
     assert provider.calls == [("INFY", "10y"), ("TCS", "10y")]
+
+
+def test_daily_history_is_reused_from_disk_on_same_day(tmp_path):
+    provider = FakeKiteProvider()
+    first = KiteDataProvider(provider, history_cache_directory=tmp_path)
+    downloaded = first.get_data("RELIANCE")
+
+    restarted = KiteDataProvider(provider, history_cache_directory=tmp_path)
+    cached = restarted.get_data("RELIANCE")
+
+    assert provider.calls == [("RELIANCE", "1y")]
+    pd.testing.assert_frame_equal(cached, downloaded)

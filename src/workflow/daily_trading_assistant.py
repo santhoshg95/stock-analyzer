@@ -64,6 +64,12 @@ class DailyTradingAssistant:
         return option.get("rejection") or {}
 
     @staticmethod
+    def _short_put_candidate(plan: dict[str, Any]) -> dict[str, Any]:
+        """Normalize explicit JSON null from rejected short-put plans."""
+        candidate = plan.get("candidate")
+        return candidate if isinstance(candidate, dict) else {}
+
+    @staticmethod
     def _technical_probability(candidate: dict[str, Any], news_score: float = 0) -> float:
         # A transparent heuristic, capped below certainty.  It is deliberately
         # labelled as an estimate until calibrated against recorded outcomes.
@@ -468,9 +474,28 @@ class DailyTradingAssistant:
 
     def generate(self, limit: int = 15, minimum_score: int = 40) -> dict[str, Any]:
         started = perf_counter()
+        news_preload_executor = None
+        news_preload_future = None
+        if self.platform.settings.market_data_source == "kite":
+            news_preload_executor = ThreadPoolExecutor(max_workers=1)
+            news_preload_future = news_preload_executor.submit(NewsAnalysisService.preload_model)
         # Keep a small replacement buffer, rather than enriching up to 45 names.
         enrichment_limit = min(20, limit + 5)
-        ranked = self.platform.suggest_stocks(limit=enrichment_limit, minimum_score=minimum_score)
+        # Technical screening is cheap after the daily candle cache is warm.
+        # Expensive 10-year history and option-chain enrichment is deferred
+        # until shared market context has been collected.
+        try:
+            ranked = self.platform.suggest_stocks(
+                limit=enrichment_limit, minimum_score=minimum_score, enrich=False
+            )
+            deferred_enrichment = True
+        except TypeError as exc:
+            if "enrich" not in str(exc):
+                raise
+            ranked = self.platform.suggest_stocks(
+                limit=enrichment_limit, minimum_score=minimum_score
+            )
+            deferred_enrichment = False
         screening_seconds = perf_counter() - started
         logger.info("Daily stage screening: %.3fs", screening_seconds)
 
@@ -478,6 +503,15 @@ class DailyTradingAssistant:
         enrichment = ContextEnrichment(self.platform.settings.market_data_source == "kite")
         market_context, sector_strength = enrichment.market_and_sectors()
         candidates = ranked["suggestions"]
+        if deferred_enrichment:
+            enrich_started = perf_counter()
+            if len(candidates) > 1:
+                with ThreadPoolExecutor(max_workers=min(2, len(candidates))) as executor:
+                    candidates = list(executor.map(self.platform.enrich_candidate, candidates))
+            else:
+                candidates = [self.platform.enrich_candidate(candidate) for candidate in candidates]
+            ranked["suggestions"] = candidates
+            logger.info("Daily stage finalist enrichment: %.3fs", perf_counter() - enrich_started)
         # Relative-strength downloads are independent and safely bounded.
         if len(candidates) > 1:
             with ThreadPoolExecutor(max_workers=min(4, len(candidates))) as executor:
@@ -503,6 +537,20 @@ class DailyTradingAssistant:
         preliminary_seconds = perf_counter() - preliminary_started
         logger.info("Daily stage preliminary review: %.3fs", preliminary_seconds)
 
+        preload_wait_started = perf_counter()
+        preload_result = (
+            news_preload_future.result() if news_preload_future is not None
+            else {"available": False, "model_load_seconds": 0, "wall_seconds": 0}
+        )
+        news_preload_wait_seconds = perf_counter() - preload_wait_started
+        if news_preload_executor is not None:
+            news_preload_executor.shutdown(wait=False)
+        logger.info(
+            "News model preload: load=%.3fs wall=%.3fs wait_after_screening=%.3fs",
+            preload_result.get("model_load_seconds", 0),
+            preload_result.get("wall_seconds", 0), news_preload_wait_seconds,
+        )
+
         # News is expensive, so request it only for stocks that survived all
         # technical, market, liquidity, risk, and execution gates. A three-name
         # buffer allows bearish material news to remove a finalist.
@@ -511,13 +559,25 @@ class DailyTradingAssistant:
             trade["symbol"] for trade in preliminary if trade["status"] != "REJECTED"
         ][:min(len(preliminary), limit + 3)]
         news_by_symbol: dict[str, dict[str, Any]] = {}
+        results: list[dict[str, Any]] = []
         if self.platform.settings.market_data_source == "kite" and news_target_symbols:
             with ThreadPoolExecutor(max_workers=min(4, len(news_target_symbols))) as executor:
                 results = list(executor.map(NewsAnalysisService.analyze, news_target_symbols))
             news_by_symbol = dict(zip(news_target_symbols, results))
         news_seconds = perf_counter() - news_started
+        news_component_timings = [result.get("timings", {}) for result in results]
+        news_network_seconds = sum(item.get("network_seconds", 0) for item in news_component_timings)
+        news_model_load_seconds = (
+            preload_result.get("model_load_seconds", 0)
+            + sum(item.get("model_load_seconds", 0) for item in news_component_timings)
+        )
+        news_inference_seconds = sum(item.get("inference_seconds", 0) for item in news_component_timings)
         logger.info("Daily stage targeted news: %.3fs for %d stocks",
                     news_seconds, len(news_target_symbols))
+        logger.info(
+            "Daily news timings: model_load=%.3fs inference=%.3fs network=%.3fs wall=%.3fs",
+            news_model_load_seconds, news_inference_seconds, news_network_seconds, news_seconds,
+        )
 
         final_review_started = perf_counter()
         reviewed = [
@@ -546,6 +606,10 @@ class DailyTradingAssistant:
         )
         short_put_plans = [item.get("short_put_strategy", {}) for item in reviewed]
         approved_short_puts = [plan for plan in short_put_plans if plan.get("available")]
+        approved_short_puts_with_candidate = [
+            plan for plan in approved_short_puts
+            if self._short_put_candidate(plan)
+        ]
         short_put_rejections = Counter(
             plan.get("rejection_code") for plan in short_put_plans
             if not plan.get("available") and plan.get("rejection_code")
@@ -589,6 +653,10 @@ class DailyTradingAssistant:
             "market_and_relative_strength_seconds": round(context_seconds, 3),
             "preliminary_review_seconds": round(preliminary_seconds, 3),
             "targeted_news_seconds": round(news_seconds, 3),
+            "news_model_load_seconds": round(news_model_load_seconds, 3),
+            "news_model_preload_wait_seconds": round(news_preload_wait_seconds, 3),
+            "news_inference_seconds": round(news_inference_seconds, 3),
+            "news_network_seconds": round(news_network_seconds, 3),
             "final_review_seconds": round(final_review_seconds, 3),
             "total_seconds": round(perf_counter() - started, 3),
             "news_stocks_requested": len(news_target_symbols),
@@ -637,11 +705,14 @@ class DailyTradingAssistant:
                 "bull_put_spread_approved": sum(1 for plan in approved_short_puts if plan.get("strategy") == "BULL_PUT_SPREAD"),
                 "short_put_rejected": len(short_put_plans) - len(approved_short_puts),
                 "average_probability_otm": (lambda values: round(sum(values) / len(values), 2) if values else None)([
-                    plan.get("candidate", {}).get("probability_otm")
+                    self._short_put_candidate(plan).get("probability_otm")
                     for plan in short_put_plans
-                    if plan.get("candidate", {}).get("probability_otm") is not None
+                    if self._short_put_candidate(plan).get("probability_otm") is not None
                 ]),
-                "average_otm_distance": round(sum(plan["candidate"]["strike_distance_percent"] for plan in approved_short_puts) / len(approved_short_puts), 2) if approved_short_puts else None,
+                "average_otm_distance": round(
+                    sum(plan["candidate"]["strike_distance_percent"] for plan in approved_short_puts_with_candidate)
+                    / len(approved_short_puts_with_candidate), 2
+                ) if approved_short_puts_with_candidate else None,
                 "average_short_put_return_on_risk": round(sum(plan["return_on_risk_percent"] for plan in approved_short_puts) / len(approved_short_puts), 2) if approved_short_puts else None,
                 "most_common_short_put_rejection": short_put_rejections.most_common(1)[0][0] if short_put_rejections else None,
                 "average_probability": average_probability if trades else None,

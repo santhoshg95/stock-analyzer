@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from src.news.analysis_service import NewsAnalysisService
-from src.news.ai_sentiment import AISentimentAnalyzer, AISentimentError
+from src.news.ai_sentiment import AISentimentAnalyzer, AISentimentError, get_finbert_pipeline
 
 
 RSS = b"""<rss><channel>
@@ -15,6 +15,9 @@ RSS = b"""<rss><channel>
 
 
 class NewsAnalysisServiceTests(unittest.TestCase):
+    def test_finbert_pipeline_has_single_entry_process_cache(self):
+        self.assertEqual(get_finbert_pipeline.cache_parameters()["maxsize"], 1)
+
     def tearDown(self):
         NewsAnalysisService._cache.clear()
 
@@ -39,6 +42,8 @@ class NewsAnalysisServiceTests(unittest.TestCase):
         self.assertEqual(result["article_count"], 2)
         self.assertEqual(len(result["headlines"]), 2)
         self.assertEqual(result["analysis_method"], "LOCAL_FINBERT_SPACY")
+        self.assertIn("network_seconds", result["timings"])
+        self.assertIn("inference_seconds", result["timings"])
         analyzer.analyze.assert_called_once()
 
     @patch("src.news.analysis_service.requests.get")
@@ -81,11 +86,35 @@ class NewsAnalysisServiceTests(unittest.TestCase):
         self.assertEqual(result["analysis_provider"], "LOCAL_FINBERT_SPACY")
         self.assertEqual(result["entities"][0]["text"], "State Bank of India")
         sentiment_pipeline.assert_called_once_with(
-            "State Bank of India reports results Quarterly performance exceeded expectations.",
+            ["State Bank of India reports results Quarterly performance exceeded expectations."],
             top_k=None,
             truncation=True,
+            batch_size=1,
         )
         nlp.assert_called_once()
+
+    def test_finbert_batches_multiple_articles(self):
+        sentiment_pipeline = Mock(return_value=[
+            [{"label": "positive", "score": .8}, {"label": "negative", "score": .1},
+             {"label": "neutral", "score": .1}],
+            [{"label": "positive", "score": .2}, {"label": "negative", "score": .2},
+             {"label": "neutral", "score": .6}],
+        ])
+        documents = [SimpleNamespace(ents=[]), SimpleNamespace(ents=[])]
+        nlp = Mock()
+        nlp.pipe.return_value = documents
+        analyzer = AISentimentAnalyzer(sentiment_pipeline=sentiment_pipeline, nlp=nlp)
+
+        result = analyzer.analyze("SBIN", [
+            {"title": "First", "description": "article"},
+            {"title": "Second", "description": "article"},
+        ])
+
+        self.assertEqual(len(result["article_assessments"]), 2)
+        sentiment_pipeline.assert_called_once_with(
+            ["First article", "Second article"], top_k=None, truncation=True, batch_size=2
+        )
+        nlp.pipe.assert_called_once_with(["First article", "Second article"], batch_size=2)
 
     @patch("src.news.analysis_service.requests.get")
     def test_default_news_analysis_is_cached_across_requests(self, get):

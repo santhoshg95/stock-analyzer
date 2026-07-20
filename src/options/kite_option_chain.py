@@ -22,10 +22,10 @@ class OptionQuoteUnavailableError(ValueError):
 class KiteOptionChainProvider:
     """Loads the nearest expiry's contracts and quote/OI data from Kite."""
 
-    def __init__(self, kite):
+    def __init__(self, kite, instruments=None):
         self.kite = kite
         self.oi_cache_path = Path("data/cache/option_chain/oi_snapshots.json")
-        self._instruments = None
+        self._instruments = instruments
         self._chain_cache = {}
 
     def _load_instruments(self):

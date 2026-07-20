@@ -11,8 +11,9 @@ from email.utils import parsedate_to_datetime
 from html import unescape
 from copy import deepcopy
 import re
+import logging
 from threading import Lock
-from time import monotonic
+from time import monotonic, perf_counter
 from typing import Any
 from urllib.parse import quote_plus
 from xml.etree import ElementTree
@@ -20,6 +21,9 @@ from xml.etree import ElementTree
 import requests
 
 from src.news.ai_sentiment import AISentimentAnalyzer, AISentimentError
+
+
+logger = logging.getLogger(__name__)
 
 
 class NewsAnalysisService:
@@ -39,6 +43,19 @@ class NewsAnalysisService:
                     cls._analyzer = AISentimentAnalyzer()
         return cls._analyzer
 
+    @classmethod
+    def preload_model(cls) -> dict[str, Any]:
+        """Warm the process-wide local models before the targeted-news stage."""
+        started = perf_counter()
+        try:
+            model_load_seconds = cls._shared_analyzer().load_finbert()
+            return {"available": True, "model_load_seconds": model_load_seconds,
+                    "wall_seconds": perf_counter() - started}
+        except AISentimentError as exc:
+            logger.warning("FinBERT preload unavailable: %s", exc)
+            return {"available": False, "model_load_seconds": 0,
+                    "wall_seconds": perf_counter() - started, "error": str(exc)}
+
     @staticmethod
     def _text(value: str) -> str:
         return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", unescape(value or ""))).strip()
@@ -54,6 +71,7 @@ class NewsAnalysisService:
                 if cached and monotonic() - cached[0] < cls.cache_ttl_seconds:
                     return deepcopy(cached[1])
         url = "https://news.google.com/rss/search?q=" + quote_plus(f"{symbol} NSE stock") + "&hl=en-IN&gl=IN&ceid=IN:en"
+        network_started = perf_counter()
         try:
             response = requests.get(url, timeout=timeout, headers={"User-Agent": "stock-analyzer/1.0"})
             response.raise_for_status()
@@ -70,7 +88,11 @@ class NewsAnalysisService:
                 "reasons": [f"News feed unavailable: {exc.__class__.__name__}."],
                 "analysis_method": "UNAVAILABLE",
                 "score_impact": 0,
+                "timings": {"network_seconds": round(perf_counter() - network_started, 3),
+                            "model_load_seconds": 0, "inference_seconds": 0},
             }
+        network_seconds = perf_counter() - network_started
+        logger.info("News network time for %s: %.3fs", cache_key, network_seconds)
 
         articles = []
         for item in root.findall("./channel/item")[:limit]:
@@ -88,7 +110,9 @@ class NewsAnalysisService:
             return {"available": False, "score": 0, "sentiment": "NEUTRAL", "confidence": 0,
                     "article_count": 0, "events": [], "headlines": [], "materiality": "NONE",
                     "trade_impact": "NONE", "analysis_method": "UNAVAILABLE", "score_impact": 0,
-                    "reasons": ["No news articles were available for AI analysis; score impact is neutral."]}
+                    "reasons": ["No news articles were available for AI analysis; score impact is neutral."],
+                    "timings": {"network_seconds": round(network_seconds, 3),
+                                "model_load_seconds": 0, "inference_seconds": 0}}
         ai_analyzer = analyzer or cls._shared_analyzer()
         try:
             assessment = ai_analyzer.analyze(symbol, articles)
@@ -97,7 +121,10 @@ class NewsAnalysisService:
                     "article_count": count, "events": [], "headlines": articles[:3],
                     "materiality": "NONE", "trade_impact": "NONE",
                     "score_impact": 0,
-                    "reasons": [f"{exc} Score impact is neutral."], "analysis_method": "AI_UNAVAILABLE"}
+                    "reasons": [f"{exc} Score impact is neutral."], "analysis_method": "AI_UNAVAILABLE",
+                    "timings": {"network_seconds": round(network_seconds, 3),
+                                "model_load_seconds": 0, "inference_seconds": 0}}
+        ai_timings = assessment.get("timings", {})
         result = {
             "available": True,
             "score": round(float(assessment["score"]), 2),
@@ -114,6 +141,11 @@ class NewsAnalysisService:
             "analysis_method": assessment.get("analysis_provider", "LOCAL_AI_MODEL"),
             "model": ai_analyzer.model,
             "generated_at": datetime.now(timezone.utc).isoformat(),
+            "timings": {
+                "network_seconds": round(network_seconds, 3),
+                "model_load_seconds": ai_timings.get("model_load_seconds", 0),
+                "inference_seconds": ai_timings.get("inference_seconds", 0),
+            },
         }
         if analyzer is None:
             with cls._cache_lock:
