@@ -49,6 +49,7 @@ def candidate_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
         event = trade.get("event_risk", {})
         rows.append({
             "Symbol": trade.get("symbol"), "Status": trade.get("status"),
+            "Executable trade": "YES" if trade.get("status") == "TRADE" else "NO",
             "Action": trade.get("final_action"), "Quality": trade.get("quality_grade"),
             "Quality score": trade.get("quality_score"),
             "Readiness": trade.get("execution_readiness_score"),
@@ -83,6 +84,9 @@ def selected_stock_details(report: dict[str, Any]) -> None:
         plan = option.get("trade") or {}
         label = f"{trade.get('symbol')} — {trade.get('final_action')} — {trade.get('status')}"
         with st.expander(label):
+            if trade.get("status") != "TRADE":
+                st.warning("Watchlist/research candidate only — this is not an executable trade. "
+                           "Position quantity remains zero until every final gate passes.")
             columns = st.columns(4)
             columns[0].metric("Current price", value(trade.get("current_price")))
             columns[1].metric("Support", value(levels.get("support")))
@@ -97,13 +101,15 @@ def selected_stock_details(report: dict[str, Any]) -> None:
             st.write(f"**Expiry:** {plan.get('expiry', option.get('expiry', 'UNAVAILABLE'))}")
             st.write(f"**Canonical structure:** {trade.get('option_structure', {}).get('status', 'UNAVAILABLE')}")
             st.write(f"**Canonical approval:** {trade.get('option_trade_approval', {}).get('status', 'UNAVAILABLE')}")
-            legs = option_leg_rows(trade)
+            approval = trade.get("option_trade_approval", {}).get("status")
+            legs = option_leg_rows(trade) if approval == "APPROVED" and trade.get("status") == "TRADE" else []
             if legs:
                 st.markdown("**Exact option strikes**")
                 st.dataframe(pd.DataFrame(legs), width="stretch", hide_index=True)
             else:
                 rejection = option.get("rejection") or {}
-                st.warning(rejection.get("reason", option.get("reason", "No executable option strike was approved.")))
+                st.warning(rejection.get("reason", option.get("reason",
+                           "No executable option strike was approved for this candidate.")))
 
 
 def snapshot_rows(group: dict[str, Any]) -> list[dict[str, Any]]:
@@ -129,7 +135,9 @@ def show_report(report: dict[str, Any]) -> None:
             "No executable or watchlist candidates were produced. Review rejected candidates for exact reasons."
         )
         if rows:
-            st.subheader("Selected-stock levels and option strikes")
+            st.subheader("Candidate levels and approved option strikes")
+            st.caption("This section includes both executable trades and watchlist candidates. "
+                       "Only rows marked TRADE / Executable trade YES are actionable paper-trade plans.")
             selected_stock_details(report)
     with tabs[1]:
         market = report.get("market", {})
