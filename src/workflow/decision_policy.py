@@ -47,14 +47,27 @@ def option_confidence_status(confidence: float | None) -> str:
             else "CONFLICT" if confidence >= 35 else "UNRELIABLE")
 
 
-def market_risk_scale(confidence: float, available: bool = True) -> float:
+def market_risk_scale(confidence: float, available: bool = True,
+                      alignment_status: str | None = None) -> float:
     if not available:
         return 1.0
-    if confidence < 50:
-        return .5
-    if confidence < 65:
-        return .75
-    return 1.0
+    confidence_scale = .5 if confidence < 50 else .75 if confidence < 65 else 1.0
+    alignment_scale = .5 if alignment_status == "CONFLICT" else 1.0
+    return min(confidence_scale, alignment_scale)
+
+
+def risk_reward_tier(score: float, risk_reward: float, a_minimum: float = 1.5,
+                     b_minimum: float = 1.3, c_minimum: float = 1.2) -> dict:
+    """Grade R:R in the context of setup confidence instead of one hard gate."""
+    if score >= 80:
+        grade, minimum = "A", a_minimum
+    elif score >= 72:
+        grade, minimum = "B", b_minimum
+    else:
+        grade, minimum = "C", c_minimum
+    return {"grade": grade, "minimum": minimum,
+            "approved": risk_reward >= minimum,
+            "watchlist_eligible": risk_reward >= c_minimum}
 
 
 def combine_strategy_eligibility(entry_confirmed: bool, equity_risk_reward: float,

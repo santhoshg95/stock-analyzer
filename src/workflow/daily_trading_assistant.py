@@ -20,7 +20,7 @@ from src.options.short_put import ShortPutStrategyEngine
 from src.workflow.decision_policy import (
     classify_setup, market_alignment, normalize_market_regime,
     option_confidence_status, pcr_adjustment, market_risk_scale,
-    combine_strategy_eligibility,
+    combine_strategy_eligibility, risk_reward_tier,
 )
 
 logger = logging.getLogger(__name__)
@@ -224,7 +224,9 @@ class DailyTradingAssistant:
             candidate.get("entry_report", analysis["entry"]),
             breakout_probability=contextual_breakout_probability,
         ))
-        risk_scale = market_risk_scale(market.get("confidence", 0), market.get("available", False))
+        risk_scale = market_risk_scale(
+            market.get("confidence", 0), market.get("available", False), alignment["status"]
+        )
         base_risk = PositionSizingEngine.calculate(
             self.platform.settings.capital,
             self.platform.settings.risk_percent,
@@ -325,14 +327,23 @@ class DailyTradingAssistant:
         ]
         reasons.extend(option.get("reasons", []))
         reasons.extend(news["reasons"])
-        minimum_equity_rr = self.platform.settings.equity_min_risk_reward
-        low_risk_reward = plan["risk_reward"] < minimum_equity_rr
+        rr_tier = risk_reward_tier(
+            unified_score,
+            plan["risk_reward"],
+            self.platform.settings.equity_min_risk_reward,
+            self.platform.settings.equity_b_grade_min_risk_reward,
+            self.platform.settings.equity_watchlist_min_risk_reward,
+        )
+        minimum_equity_rr = rr_tier["minimum"]
+        low_risk_reward = not rr_tier["approved"]
         strategy_eligibility = combine_strategy_eligibility(
             entry_eligible, plan["risk_reward"], minimum_equity_rr, short_put_approved,
         )
         # Reversal candidates remain observable while their entry develops;
         # inadequate R:R still makes them ineligible for an actual trade.
-        risk_reward_rejects_setup = low_risk_reward and setup != "REVERSAL CANDIDATE" and not strategy_eligibility["short_put_approved"]
+        risk_reward_rejects_setup = (not rr_tier["watchlist_eligible"]
+                                     and setup != "REVERSAL CANDIDATE"
+                                     and not strategy_eligibility["short_put_approved"])
         equity_execution_failure = (
             risk_reward_rejects_setup or plan["stop_loss"] <= 0 or scaled_quantity <= 0
         )
@@ -342,14 +353,16 @@ class DailyTradingAssistant:
         )
         if critical_failure or unified_score < 55:
             status = "REJECTED"
-        elif (not short_put_approved and (not entry_eligible or unified_score < 70 or setup in {"BULLISH_PULLBACK", "BEARISH_BOUNCE", "REVERSAL CANDIDATE"}
+        elif (not short_put_approved and (not entry_eligible or unified_score < 72 or low_risk_reward or setup in {"BULLISH_PULLBACK", "BEARISH_BOUNCE", "REVERSAL CANDIDATE"}
               or (market.get("confidence", 0) >= 65 and alignment["status"] == "CONFLICT"))):
             status = "WATCHLIST"
         else:
             status = "TRADE"
         status_reasons = list(validation["critical_conflicts"])
-        if plan["risk_reward"] < minimum_equity_rr:
-            status_reasons.append(f"Risk/reward {plan['risk_reward']}:1 is below the {minimum_equity_rr} minimum.")
+        if low_risk_reward:
+            status_reasons.append(
+                f"{rr_tier['grade']}-grade risk/reward {plan['risk_reward']}:1 is below the {minimum_equity_rr} minimum."
+            )
             status_reasons.extend(plan.get("diagnostics", []))
         if plan["stop_loss"] <= 0:
             status_reasons.append("Stop-loss is invalid.")
@@ -358,8 +371,8 @@ class DailyTradingAssistant:
         if unified_score < 55:
             status_reasons.append(f"Final score {unified_score} is below 55.")
         if status == "WATCHLIST":
-            if unified_score < 70:
-                status_reasons.append(f"Final score {unified_score} has not reached the 70 trade threshold.")
+            if unified_score < 72:
+                status_reasons.append(f"Final score {unified_score} has not reached the 72 trade threshold.")
             if not entry_eligible:
                 missing = setup_evaluation.get("stage_2", {}).get("missing", [])
                 status_reasons.append("Entry confirmation missing: " + ", ".join(missing))
@@ -409,6 +422,7 @@ class DailyTradingAssistant:
             "risk_policy": {"configured_risk_percent": self.platform.settings.risk_percent,
                             "effective_risk_percent": scaled_risk["effective_risk_percent"],
                             "market_confidence": market.get("confidence", 0), "position_scale": risk_scale},
+            "risk_reward_policy": rr_tier,
             "option_budget_policy": {"capital_available": self.platform.settings.option_capital,
                                      "risk_per_trade": self.platform.settings.option_risk_per_trade,
                                      "confidence_adjusted_risk": scaled_option_risk,
@@ -472,15 +486,16 @@ class DailyTradingAssistant:
             trade["recommendation_id"] = None
         return trade
 
-    def generate(self, limit: int = 15, minimum_score: int = 40) -> dict[str, Any]:
+    def generate(self, limit: int = 5, minimum_score: int = 40) -> dict[str, Any]:
         started = perf_counter()
         news_preload_executor = None
         news_preload_future = None
         if self.platform.settings.market_data_source == "kite":
             news_preload_executor = ThreadPoolExecutor(max_workers=1)
             news_preload_future = news_preload_executor.submit(NewsAnalysisService.preload_model)
-        # Keep a small replacement buffer, rather than enriching up to 45 names.
-        enrichment_limit = min(20, limit + 5)
+        # Ranking and risk optimize different properties, so always send the
+        # top 20 (configurable up to 30) through risk/context review.
+        enrichment_limit = min(30, max(self.platform.settings.ranking_shortlist_size, limit + 5))
         # Technical screening is cheap after the daily candle cache is warm.
         # Expensive 10-year history and option-chain enrichment is deferred
         # until shared market context has been collected.
@@ -635,7 +650,7 @@ class DailyTradingAssistant:
             },
         }
         trust_passed = stage_counts.get("trust_passed", len(ranked["suggestions"]))
-        risk_valid = sum(1 for item in reviewed if item["levels"]["risk_reward"] >= self.platform.settings.equity_min_risk_reward and item["levels"]["stop_loss"] > 0)
+        risk_valid = sum(1 for item in reviewed if item["risk_reward_policy"]["watchlist_eligible"] and item["levels"]["stop_loss"] > 0)
         filter_stages = [
             {"stage": "universe", "input": ranked["universe_size"], "passed": ranked["universe_size"], "rejected": 0},
             {"stage": "analysis", "input": ranked["universe_size"], "passed": stage_counts.get("analysis_succeeded", 0), "rejected": stage_counts.get("analysis_failed", 0)},

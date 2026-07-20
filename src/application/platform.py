@@ -609,14 +609,14 @@ class TradingPlatform:
     def portfolio(self) -> dict[str, Any]:
         return self._serialize(self.paper_broker.portfolio())
 
-    def daily_report(self, limit: int = 15, minimum_score: int = 40) -> dict[str, Any]:
+    def daily_report(self, limit: int = 5, minimum_score: int = 40) -> dict[str, Any]:
         """Generate the final ranked daily trade report.
 
         This is a research/paper-trading recommendation only.  It never sends
         live orders, even when Kite is the configured data source.
         """
-        if not isinstance(limit, int) or not 1 <= limit <= 15:
-            raise ValidationError("limit must be an integer between 1 and 15")
+        if not isinstance(limit, int) or not 1 <= limit <= 20:
+            raise ValidationError("limit must be an integer between 1 and 20")
         if not isinstance(minimum_score, int) or not 0 <= minimum_score <= 100:
             raise ValidationError("minimum_score must be an integer between 0 and 100")
         return self._serialize(DailyTradingAssistant(self).generate(limit, minimum_score))

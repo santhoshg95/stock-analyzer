@@ -51,7 +51,7 @@ def suggestions(limit: int = 5, minimum_score: int = 40):
 
 
 @app.get("/daily-report")
-def daily_report(limit: int = 15, minimum_score: int = 40):
+def daily_report(limit: int = 5, minimum_score: int = 40):
     return _call(lambda: platform.daily_report(limit, minimum_score))
 
 

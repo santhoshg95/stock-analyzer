@@ -42,7 +42,7 @@ class DailyReportContractTests(unittest.TestCase):
         self.assertIn("news_model_load_seconds", report["timings"])
         self.assertIn("news_inference_seconds", report["timings"])
         self.assertIn("news_network_seconds", report["timings"])
-        self.assertLessEqual(report["timings"]["candidates_enriched"], 6)
+        self.assertLessEqual(report["timings"]["candidates_enriched"], 20)
         self.assertEqual(report["timings"]["news_stocks_requested"], 0)
         self.assertEqual(
             report["summary"]["trades_generated"] + report["summary"]["watchlisted"]
@@ -58,6 +58,7 @@ class DailyReportContractTests(unittest.TestCase):
             self.assertIn("model_confidence", trade)
             self.assertIn("trade_eligibility", trade)
             self.assertIn("trade_readiness", trade)
+            self.assertIn("risk_reward_policy", trade)
             self.assertIn("current_month_seasonality", trade)
             self.assertTrue(trade["option_budget_policy"]["stock_eligibility_independent"])
         self.assertIn("TODAY'S MARKET SUMMARY", DailyReportPresenter.render(report))

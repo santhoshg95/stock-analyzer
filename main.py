@@ -18,7 +18,7 @@ def main():
     suggest.add_argument("--limit", type=int, default=5)
     suggest.add_argument("--minimum-score", type=int, default=40)
     daily = subcommands.add_parser("daily-report", help="generate the final daily trading report")
-    daily.add_argument("--limit", type=int, default=15)
+    daily.add_argument("--limit", type=int, default=5, help="maximum final trades; top 20 are risk-reviewed")
     daily.add_argument("--minimum-score", type=int, default=40)
     daily.add_argument("--json", action="store_true", help="emit machine-readable JSON instead of the CLI report")
     outcome = subcommands.add_parser("record-outcome", help="record a completed recommendation for calibration")
