@@ -30,12 +30,18 @@ def _cached_safetensors_snapshots(model_name: str) -> list[Path]:
 @lru_cache(maxsize=1)
 def get_finbert_pipeline(model_name: str):
     """Build exactly one local-first FinBERT pipeline per Python process."""
+    cache_root = Path(os.getenv("HF_HUB_CACHE", Path(os.getenv("HF_HOME", Path.home() / ".cache/huggingface")) / "hub"))
+    repository_path = cache_root / ("models--" + model_name.replace("/", "--"))
+    if repository_path.exists():
+        # Set offline flags before importing transformers/huggingface_hub.
+        # This is a second guard behind local_files_only=True and prevents
+        # metadata, commit, discussion, or conversion-service requests.
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
     from transformers import (
         AutoConfig, AutoModelForSequenceClassification, AutoTokenizer, pipeline,
     )
 
-    cache_root = Path(os.getenv("HF_HUB_CACHE", Path(os.getenv("HF_HOME", Path.home() / ".cache/huggingface")) / "hub"))
-    repository_path = cache_root / ("models--" + model_name.replace("/", "--"))
     if not repository_path.exists():
         # Only a genuinely absent cache may use the network. Once the cache
         # exists every subsequent process takes the strict local path below.
@@ -204,6 +210,6 @@ class AISentimentAnalyzer:
             "entities": all_entities, "analysis_provider": "LOCAL_FINBERT_SPACY",
             "timings": {
                 "model_load_seconds": round(model_load_seconds, 3),
-                "inference_seconds": round(inference_seconds, 3),
+                "inference_seconds": round(inference_seconds, 6),
             },
         }

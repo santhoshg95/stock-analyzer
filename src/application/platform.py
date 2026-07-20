@@ -505,11 +505,9 @@ class TradingPlatform:
             if trade["available"] and not validation["approved"]:
                 rejection = {"code": "ENTRY_VALIDATION_FAILED", "category": "EXECUTION",
                              "reason": "; ".join(validation["reasons"])}
-            candidates = [{
-                "strategy": trade["strategy"],
-                "available": bool(trade["available"] and validation["approved"]),
-                "source": "DIRECTIONAL_OPTION_ENGINE",
-            }]
+            # Bullish premium-selling plans have first refusal. Directional
+            # debit spreads are a fallback only when no seller plan is valid.
+            candidates = []
             if short_put.get("strategy"):
                 candidates.append({
                     "strategy": short_put["strategy"],
@@ -517,6 +515,11 @@ class TradingPlatform:
                     "source": "SHORT_PUT_ENGINE",
                     "rejection_code": short_put.get("rejection_code"),
                 })
+            candidates.append({
+                "strategy": trade["strategy"],
+                "available": bool(trade["available"] and validation["approved"]),
+                "source": "DIRECTIONAL_OPTION_ENGINE",
+            })
             selected_strategy = next(
                 (item["strategy"] for item in candidates if item["available"]), "Wait"
             )

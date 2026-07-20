@@ -100,12 +100,17 @@ class ShortPutStrategyEngine:
             score += min(10, max(0, probability - settings.short_put_min_probability_otm) / 2)
         return {
             "strike": put.strike, "expiry": put.expiry, "dte": dte,
+            "strike_distance_percent": round((spot - put.strike) / spot * 100, 2) if spot else None,
             "premium": put.bid, "delta": delta, "atr_coverage": round(coverage, 2),
             "probability_otm": probability, "probability_source": source,
             "probability_quality": quality, "spread_percent": round(spread, 2),
             "open_interest": put.open_interest, "volume": put.volume,
             "score": round(min(100, score), 2), "result": "PASS" if not failures else "REJECT",
             "rejection_codes": failures,
+            "recommendations": (
+                ["Wait for IV expansion.", "Evaluate the next monthly expiry for a better executable credit."]
+                if "PREMIUM_TOO_LOW" in failures else []
+            ),
         }
 
     @classmethod
@@ -279,10 +284,17 @@ class ShortPutStrategyEngine:
         capital_required = capital_per_lot * lots
         ror = maximum_profit / maximum_loss * 100 if maximum_loss > 0 else 0
         rom = maximum_profit / capital_required * 100 if capital_required > 0 else 0
+        annualized_rom = rom * 365 / max(dte, 1)
         require(ror >= settings.short_put_min_return_on_risk_percent, ShortPutRejectionCode.MAX_LOSS_EXCEEDED, "Return on risk is below the configured minimum.")
         require(rom >= settings.short_put_min_return_on_margin_percent, ShortPutRejectionCode.MAX_LOSS_EXCEEDED, "Return on margin is below the configured minimum.")
 
         approved = not rejections
+        actionable_recommendations = []
+        if any(item.code == ShortPutRejectionCode.PREMIUM_TOO_LOW for item in rejections):
+            actionable_recommendations.extend([
+                "Wait for IV expansion before selling this strike.",
+                "Evaluate the next monthly expiry for a higher executable premium.",
+            ])
         evaluation = ShortPutEvaluation("GOOD" if spread <= 5 else "ACCEPTABLE", "DEFINED_RISK" if use_spread else "LARGE_DOWNSIDE_RISK", approved, rejections, warnings)
         quantity = lots * lot_size
         sold_leg = ShortPutLeg("SELL", sold.symbol, sold.strike, premium, sold.bid, sold.ask, quantity)
@@ -293,5 +305,6 @@ class ShortPutStrategyEngine:
             round(rom, 2), round(sold.strike - net_credit, 2), lots, evaluation,
             rejections[0].code if rejections else None, [item.reason for item in rejections], warnings,
             margin_source, "PORTFOLIO_SECTOR_AND_CAPITAL_CHECKED", strike_search,
+            round(annualized_rom, 2), actionable_recommendations,
         )
         return asdict(plan)
