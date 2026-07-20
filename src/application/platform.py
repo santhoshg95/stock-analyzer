@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import date
 from pathlib import Path
 import re
 from time import sleep
+from threading import Lock
 from typing import Any
 
 import numpy as np
@@ -31,10 +33,13 @@ from src.position_sizing.position_size import PositionSizingEngine
 from src.options.engine.option_engine import OptionEngine
 from src.options.kite_option_chain import KiteOptionChainProvider
 from src.options.trade_builder import OptionTradeBuilder
+from src.options.entry_validator import OptionEntryValidator
 from src.trade_plan.trade_plan import TradePlanEngine
 from src.trading_engine.engine import TradingEngine
 from src.workflow.daily_trading_assistant import DailyTradingAssistant
 from src.learning.outcome_repository import OutcomeRepository
+from src.historical.current_month_seasonality import CurrentMonthSeasonality
+from src.historical.regime_performance import RegimePerformance
 
 
 class TradingPlatform:
@@ -53,6 +58,7 @@ class TradingPlatform:
         )
         self.engine = TradingEngine(provider=self.provider)
         self.paper_broker = paper_broker or PaperBroker(starting_cash=self.settings.capital)
+        self._option_chain_provider = None
 
     @staticmethod
     def _symbol(symbol: str) -> str:
@@ -153,6 +159,7 @@ class TradingPlatform:
             "entry": report["entry"],
             "breakout": report["breakout"],
             "candlestick": report["candlestick"],
+            "setup_evaluation": report["setup_evaluation"],
             "market_quality": report["market_quality"],
             "decision": report["decision"],
             "trade_plan": trade_plan,
@@ -213,23 +220,37 @@ class TradingPlatform:
         if not symbols:
             raise DataUnavailableError("No stocks are available to screen")
 
+        stage_counts = {"analysis_succeeded": 0, "analysis_failed": 0,
+                        "technical_passed": 0, "liquidity_passed": 0,
+                        "trust_passed": 0}
+        count_lock = Lock()
+
+        def increment(key: str) -> None:
+            with count_lock:
+                stage_counts[key] += 1
+
         def evaluate(symbol: str) -> dict[str, Any] | None:
             try:
                 report = self.analyze(symbol)
             except (DataUnavailableError, ValueError, KeyError, TypeError):
+                increment("analysis_failed")
                 return None
+            increment("analysis_succeeded")
             analysis = report["analysis"]
             decision = report["decision"]
             if analysis["score"] < minimum_score or decision["action"] not in {"BUY", "BUY ON DIP", "WATCH"}:
                 return None
+            increment("technical_passed")
             liquidity = self._stock_liquidity(analysis)
             # Avoid names that are hard to enter/exit even if their chart score
             # is attractive. The threshold is deliberately modest for F&O names.
             if liquidity["score"] < 40:
                 return None
+            increment("liquidity_passed")
             trust = self._trust_score(analysis, liquidity, report["market_quality"])
             if trust["score"] < 55:
                 return None
+            increment("trust_passed")
             return {
                 "symbol": symbol,
                 "action": decision["action"],
@@ -241,6 +262,7 @@ class TradingPlatform:
                 "trust": trust,
                 "risk_reward": report["trade_plan"]["risk_reward"],
                 "candlestick": report["candlestick"],
+                "setup_evaluation": report["setup_evaluation"],
                 "reason": decision["reason"],
                 "trade_plan": report["trade_plan"],
                 "position_size": report["position_size"],
@@ -274,6 +296,9 @@ class TradingPlatform:
         )
         top_candidates = candidates[:limit]
         for candidate in top_candidates:
+            historical = self._historical_context(candidate["symbol"])
+            candidate["current_month_seasonality"] = historical["current_month"]
+            candidate["regime_history"] = historical["regime"]
             candidate["options"] = self._option_trade_plan(candidate)
             option_confidence = candidate["options"].get("confidence", 0)
             candidate["probability"] = round(
@@ -292,6 +317,7 @@ class TradingPlatform:
             "market_data_source": self.settings.market_data_source,
             "minimum_score": minimum_score,
             "suggestions": top_candidates,
+            "statistics": stage_counts,
             "message": (
                 "No stocks currently meet the selected criteria."
                 if not candidates
@@ -302,9 +328,14 @@ class TradingPlatform:
     def _option_trade_plan(self, candidate: dict[str, Any]) -> dict[str, Any]:
         """Enrich only final candidates with live option-chain intelligence."""
         if self.settings.market_data_source != "kite":
-            return {"available": False, "reason": "Option analysis requires MARKET_DATA_SOURCE=kite."}
+            return {"available": False, "error_type": "DATA_SOURCE",
+                    "rejection": {"code": "LIVE_DATA_REQUIRED", "category": "DATA",
+                                  "reason": "Option analysis requires MARKET_DATA_SOURCE=kite."},
+                    "reason": "Option analysis requires MARKET_DATA_SOURCE=kite."}
         try:
-            chain = KiteOptionChainProvider(self.provider.provider.kite).get_chain(
+            if self._option_chain_provider is None:
+                self._option_chain_provider = KiteOptionChainProvider(self.provider.provider.kite)
+            chain = self._option_chain_provider.get_chain(
                 candidate["symbol"], candidate["current_price"]
             )
             analysis = OptionEngine().analyze(chain)
@@ -315,8 +346,14 @@ class TradingPlatform:
                 direction,
                 support=candidate["trade_plan"]["stop_loss"],
                 resistance=candidate["trade_plan"]["target1"],
-                risk_budget=candidate["position_size"]["risk_amount"],
+                risk_budget=self.settings.option_risk_per_trade,
+                capital_available=self.settings.option_capital,
             )
+            validation = OptionEntryValidator.validate(chain, trade, direction)
+            rejection = trade.get("rejection")
+            if trade["available"] and not validation["approved"]:
+                rejection = {"code": "ENTRY_VALIDATION_FAILED", "category": "EXECUTION",
+                             "reason": "; ".join(validation["reasons"])}
             return self._serialize({
                 "available": trade["available"],
                 "reason": trade.get("reason"),
@@ -329,9 +366,37 @@ class TradingPlatform:
                 "strongest_resistance": analysis.strongest_resistance,
                 "reasons": analysis.reasons,
                 "trade": trade,
+                "entry_validation": validation,
+                "rejection": rejection,
             })
-        except (TokenException, RequestException, ValueError) as exc:
-            return {"available": False, "reason": str(exc), "reasons": []}
+        except TokenException as exc:
+            return {"available": False, "error_type": "AUTHENTICATION",
+                    "rejection": {"code": "AUTHENTICATION_FAILED", "category": "DATA", "reason": f"Kite token error: {exc}"},
+                    "reason": f"Kite token error: {exc}", "reasons": []}
+        except RequestException as exc:
+            return {"available": False, "error_type": "NETWORK",
+                    "rejection": {"code": "NETWORK_FAILED", "category": "DATA", "reason": f"Kite network error: {exc}"},
+                    "reason": f"Kite network error: {exc}", "reasons": []}
+        except ValueError as exc:
+            return {"available": False, "error_type": "OPTION_DATA",
+                    "rejection": {"code": "OPTION_DATA_INVALID", "category": "DATA", "reason": str(exc)},
+                    "reason": str(exc), "reasons": []}
+        except Exception as exc:
+            return {"available": False, "error_type": exc.__class__.__name__,
+                    "rejection": {"code": "OPTION_PROVIDER_ERROR", "category": "DATA", "reason": repr(exc)},
+                    "reason": repr(exc), "reasons": []}
+
+    def _historical_context(self, symbol: str) -> dict[str, Any]:
+        try:
+            history = self.provider.get_long_history(symbol, period="10y")
+            return {"current_month": CurrentMonthSeasonality.analyze(history),
+                    "regime": RegimePerformance.analyze(history, "BULLISH")}
+        except Exception as exc:
+            reason = f"{exc.__class__.__name__}: {exc}"
+            return {"current_month": CurrentMonthSeasonality.unavailable(
+                        date.today().strftime("%B").upper(), reason),
+                    "regime": {"available": False, "regime": "UNAVAILABLE",
+                               "sample_count": 0, "reason": reason}}
 
     def paper_trade(self, symbol: str, side: str, quantity: int | None = None) -> dict[str, Any]:
         side = side.strip().upper() if isinstance(side, str) else ""

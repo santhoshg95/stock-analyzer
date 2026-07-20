@@ -250,5 +250,14 @@
     "ai_score": 67.44,
     "estimated_probability": 68.07,
     "outcome": null
+  },
+  {
+    "id": "IDFCFIRSTB-20260720063301228023",
+    "created_at": "2026-07-20T06:33:01.228043+00:00",
+    "symbol": "IDFCFIRSTB",
+    "strategy": "BUY ON DIP",
+    "ai_score": 66.97,
+    "estimated_probability": 68.96,
+    "outcome": null
   }
 ]

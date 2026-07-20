@@ -19,12 +19,6 @@ class TradePlanEngine:
 
         resistance = entry_report["resistance"]
 
-        risk = entry_report["risk"]
-
-        reward = entry_report["reward"]
-
-        risk_reward = entry_report["risk_reward"]
-
         quality = entry_report["quality"]
 
         # ----------------------------------------------------
@@ -57,13 +51,18 @@ class TradePlanEngine:
 
         entry = current_price
 
-        stop_loss = support
-
-        target1 = resistance
-
-        target2 = resistance + reward
-
-        target3 = resistance + (reward * 2)
+        atr = max(float(entry_report.get("atr") or 0), 0)
+        minimum_distance = max(abs(entry - support), atr * 0.75, entry * 0.0075)
+        stop_loss = entry - minimum_distance
+        risk = abs(entry - stop_loss)
+        target1 = entry + risk * 1.5
+        if resistance > entry:
+            target1 = min(resistance, target1)
+        target2 = entry + risk * 2
+        target3 = entry + risk * 3
+        reward = target1 - entry
+        risk_reward = reward / risk if risk > 0 else 0
+        quality = "GOOD" if risk_reward >= 2 else "AVERAGE" if risk_reward >= 1.5 else "POOR"
 
         # ----------------------------------------------------
 

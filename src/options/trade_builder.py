@@ -23,19 +23,30 @@ class OptionTradeBuilder:
         return round(contract.last_price, 2)
 
     @staticmethod
-    def _nearest(contracts, target: float):
-        liquid = [item for item in contracts if item.last_price > 0]
-        return min(liquid or contracts, key=lambda item: abs(item.strike - target)) if contracts else None
+    def _is_liquid(contract) -> bool:
+        if contract.last_price <= 0 or contract.bid <= 0 or contract.ask <= 0:
+            return False
+        midpoint = (contract.bid + contract.ask) / 2
+        spread_percent = ((contract.ask - contract.bid) / midpoint) * 100 if midpoint > 0 else float("inf")
+        return contract.open_interest >= 10_000 and contract.volume >= 1_000 and spread_percent <= 5
+
+    @classmethod
+    def _nearest(cls, contracts, target: float):
+        liquid = [item for item in contracts if cls._is_liquid(item)]
+        return min(liquid, key=lambda item: abs(item.strike - target)) if liquid else None
 
     @classmethod
     def build(cls, chain: OptionChain, strategy: str, direction: str, support: float | None = None,
-              resistance: float | None = None, risk_budget: float | None = None) -> dict[str, Any]:
+              resistance: float | None = None, risk_budget: float | None = None,
+              capital_available: float | None = None) -> dict[str, Any]:
         """Return a complete recommendation, or an unavailable explanation."""
         bullish = direction == "BULLISH"
         contracts = chain.calls if bullish else chain.puts
         long_leg = cls._nearest(contracts, chain.spot_price)
         if long_leg is None:
-            return {"available": False, "reason": "No priced option contracts are available."}
+            reason = "No executable option strike passes bid/ask, volume, OI, and spread filters."
+            return {"available": False, "reason": reason,
+                    "rejection": {"code": "NO_LIQUID_CONTRACTS", "category": "LIQUIDITY", "reason": reason}}
 
         # Prefer a vertical spread for defined risk when a second liquid strike
         # exists.  A single long option remains an explicit fallback.
@@ -68,10 +79,20 @@ class OptionTradeBuilder:
 
         breakeven = round(long_leg.strike + net_debit, 2) if bullish else round(long_leg.strike - net_debit, 2)
         max_loss_per_lot = round(maximum_loss * lot_size, 2)
-        recommended_lots = int((risk_budget or 0) // max_loss_per_lot) if max_loss_per_lot > 0 else 0
+        capital_required_per_lot = round(max(net_debit, 0) * lot_size, 2)
+        lots_by_risk = int((risk_budget or 0) // max_loss_per_lot) if max_loss_per_lot > 0 else 0
+        lots_by_capital = (int(capital_available // capital_required_per_lot)
+                           if capital_available is not None and capital_required_per_lot > 0 else lots_by_risk)
+        recommended_lots = min(lots_by_risk, lots_by_capital)
         total_quantity = recommended_lots * lot_size
         for leg in legs:
             leg["quantity"] = total_quantity
+        if recommended_lots > 0:
+            reason = None
+        elif lots_by_risk == 0:
+            reason = "Maximum loss for one lot exceeds the configured option risk budget."
+        else:
+            reason = "Capital required for one lot exceeds available capital."
         return {
             "available": recommended_lots > 0,
             # The reported strategy must match the actual legs.  The option
@@ -86,13 +107,25 @@ class OptionTradeBuilder:
             "recommended_lots": recommended_lots,
             "recommended_quantity": total_quantity,
             "risk_budget": risk_budget,
+            "capital_available": capital_available,
+            "capital_required_per_lot": capital_required_per_lot,
+            "margin_required_per_lot": capital_required_per_lot,
             "net_debit_per_lot": round(net_debit * lot_size, 2),
             "maximum_profit": round(maximum_profit * lot_size, 2) if maximum_profit is not None else None,
             "maximum_loss": max_loss_per_lot,
             "breakeven": breakeven,
             "risk_defined": short_leg is not None,
+            "structure_type": "DEFINED_RISK_DEBIT_SPREAD" if short_leg is not None else "LONG_OPTION",
+            "budget_basis": "For debit structures, capital required equals maximum loss; margin and risk must both pass.",
             "technical_support": support,
             "technical_resistance": resistance,
             "hedge_strike_target": round(hedge_target, 2),
-            "reason": None if recommended_lots > 0 else "One lot exceeds the configured maximum option risk.",
+            "reason": reason,
+            "rejection": None if recommended_lots > 0 else {
+                "code": "CAPITAL_REQUIRED_EXCEEDED" if lots_by_capital == 0 and lots_by_risk > 0 else "RISK_BUDGET_EXCEEDED",
+                "category": "CAPITAL" if lots_by_capital == 0 and lots_by_risk > 0 else "RISK", "reason": reason,
+                "required_budget": max_loss_per_lot, "available_budget": risk_budget or 0,
+                "capital_required": capital_required_per_lot, "capital_available": capital_available,
+                "maximum_loss": max_loss_per_lot,
+            },
         }

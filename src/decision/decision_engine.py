@@ -18,6 +18,7 @@ class DecisionEngine:
         entry = report["entry"]
 
         breakout = report["breakout"]
+        setup = report.get("setup_evaluation", {})
 
         score = analysis.score
 
@@ -28,7 +29,10 @@ class DecisionEngine:
         # Weak Technical Structure
         # --------------------------------------------------
 
-        if score < 40:
+        category = setup.get("stage_1", {}).get("category", "REJECT")
+        confirmed = setup.get("stage_2", {}).get("eligible", False)
+
+        if category == "REJECT" or score < 40:
 
             return {
 
@@ -45,7 +49,7 @@ class DecisionEngine:
         # Confirmed Breakout
         # --------------------------------------------------
 
-        if breakout["confirmed"]:
+        if confirmed:
 
             return {
 
@@ -53,7 +57,7 @@ class DecisionEngine:
 
                 "confidence": 95,
 
-                "reason": "Confirmed breakout with strong technical confirmation."
+                "reason": f"{category} setup passed every entry-confirmation check."
 
             }
 
@@ -62,15 +66,15 @@ class DecisionEngine:
         # Good Risk Reward
         # --------------------------------------------------
 
-        if risk_reward is not None and risk_reward >= 2:
+        if category == "REVERSAL CANDIDATE":
 
             return {
 
-                "action": "BUY ON DIP",
+                "action": "WATCH",
 
-                "confidence": 85,
+                "confidence": 70,
 
-                "reason": "Good risk-reward setup. Wait for pullback near support."
+                "reason": "Oversold reversal candidate; wait for candle, higher-low, volume and EMA20 confirmation."
 
             }
 
@@ -79,7 +83,7 @@ class DecisionEngine:
         # Watchlist
         # --------------------------------------------------
 
-        if score >= 60:
+        if category in {"TREND FOLLOWING", "BREAKOUT", "PULLBACK", "WATCHLIST"}:
 
             return {
 
@@ -87,7 +91,7 @@ class DecisionEngine:
 
                 "confidence": 75,
 
-                "reason": "Technically decent stock but no high-probability entry."
+                "reason": f"{category} setup detected, but entry confirmation is incomplete."
 
             }
 

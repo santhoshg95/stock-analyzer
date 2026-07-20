@@ -11,6 +11,18 @@ from src.market_data.base_provider import BaseMarketProvider
 
 class SectorStrength(BaseMarketProvider):
 
+    SECTOR_INDEX_SYMBOLS = {
+        "BANKING": "^NSEBANK", "IT": "^CNXIT", "PHARMA": "^CNXPHARMA",
+        "AUTO": "^CNXAUTO", "FMCG": "^CNXFMCG", "METAL": "^CNXMETAL",
+        "REALTY": "^CNXREALTY", "ENERGY": "^CNXENERGY", "INFRA": "^CNXINFRA",
+        "MEDIA": "^CNXMEDIA", "PSU_BANK": "^CNXPSUBANK",
+        "FINANCIAL_SERVICES": "NIFTY_FIN_SERVICE.NS", "POWER": "^CNXENERGY",
+        "DIVERSIFIED": "^NSEI", "CONSUMER_DURABLES": "^CNXCONSUM",
+        "CONSUMER": "^CNXFMCG", "BUILDING_MATERIALS": "^CNXINFRA",
+        "HEALTHCARE": "^CNXPHARMA", "CEMENT": "^CNXINFRA",
+        "CAPITAL_GOODS": "^CNXINFRA",
+    }
+
     def __init__(self):
 
         self.indices = pd.read_csv("resources/sector_indices.csv")
@@ -23,11 +35,14 @@ class SectorStrength(BaseMarketProvider):
 
             sector = row["Sector"]
 
-            symbol = row["IndexSymbol"]
+            symbol = self.SECTOR_INDEX_SYMBOLS.get(sector, row["IndexSymbol"])
 
             data = self.download_symbol(symbol)
 
             if data is None:
+
+                report[sector] = {"available": False, "score": 50,
+                                  "rating": "UNAVAILABLE", "reason": f"No index data for {symbol}"}
 
                 continue
 
@@ -58,6 +73,8 @@ class SectorStrength(BaseMarketProvider):
                 score = 30
 
             report[sector] = {
+
+                "available": True,
 
                 "price": data["price"],
 

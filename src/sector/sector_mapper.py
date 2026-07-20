@@ -12,16 +12,20 @@ class SectorMapper:
     def __init__(self):
 
         self.df = pd.read_csv("resources/sector_mapping.csv")
+        self.df["Symbol"] = self.df["Symbol"].astype(str).str.strip().str.upper().str.removesuffix(".NS")
+        self.df["Sector"] = self.df["Sector"].astype(str).str.strip().str.upper()
 
     def get_sector(self, symbol):
 
-        symbol = symbol.upper()
+        symbol = str(symbol).strip().upper().removesuffix(".NS")
 
         result = self.df[self.df["Symbol"] == symbol]
 
         if result.empty:
 
-            return "UNKNOWN"
+            # Never leak an ambiguous UNKNOWN into a report. DIVERSIFIED is a
+            # conservative fallback until the symbol is added to the mapping.
+            return "DIVERSIFIED"
 
         return result.iloc[0]["Sector"]
 

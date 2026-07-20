@@ -2,7 +2,7 @@
 Kite Market Data Provider
 """
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -72,12 +72,18 @@ class KiteProvider(BaseProvider):
         if kite_interval is None:
             raise ValueError(f"Unsupported Kite interval: {interval}")
 
-        candles = self.kite.historical_data(
-            instrument_token,
-            from_date,
-            date.today(),
-            kite_interval,
-        )
+        # Kite limits the date span per historical request. Daily ten-year
+        # history is fetched in bounded chunks and then de-duplicated.
+        candles = []
+        chunk_start = from_date
+        today = date.today()
+        max_days = 1999 if kite_interval == "day" else 100
+        while chunk_start <= today:
+            chunk_end = min(chunk_start + timedelta(days=max_days), today)
+            candles.extend(self.kite.historical_data(
+                instrument_token, chunk_start, chunk_end, kite_interval,
+            ))
+            chunk_start = chunk_end + timedelta(days=1)
         dataframe = pd.DataFrame(candles)
         if dataframe.empty:
             return dataframe
@@ -92,6 +98,7 @@ class KiteProvider(BaseProvider):
             }
         )
         dataframe["Date"] = pd.to_datetime(dataframe["Date"])
+        dataframe = dataframe.drop_duplicates(subset=["Date"]).sort_values("Date")
         return dataframe.set_index("Date")[["Open", "High", "Low", "Close", "Volume"]]
 
     @staticmethod
@@ -104,6 +111,7 @@ class KiteProvider(BaseProvider):
             "1y": pd.DateOffset(years=1),
             "2y": pd.DateOffset(years=2),
             "5y": pd.DateOffset(years=5),
+            "10y": pd.DateOffset(years=10),
         }
         if period not in offsets:
             raise ValueError(f"Unsupported Kite period: {period}")

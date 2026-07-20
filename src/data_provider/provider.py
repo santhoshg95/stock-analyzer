@@ -55,3 +55,7 @@ class DataProvider:
             return None
 
         return df
+
+    def get_long_history(self, symbol: str, period: str = "10y"):
+        """Offline mode can only claim the history actually present on disk."""
+        return self.get_data(symbol)

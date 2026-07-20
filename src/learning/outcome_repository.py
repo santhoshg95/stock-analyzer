@@ -27,6 +27,10 @@ class OutcomeRepository:
         identifier = f"{trade['symbol']}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
         rows.append({"id": identifier, "created_at": datetime.now(timezone.utc).isoformat(),
                      "symbol": trade["symbol"], "strategy": trade["strategy"],
+                     "setup": trade.get("setup"),
+                     "market_regime": trade.get("market_context", {}).get("regime"),
+                     "sector": trade.get("sector"),
+                     "direction": "BULLISH" if trade.get("recommendation") in {"BUY", "BUY ON DIP", "WATCH"} else "BEARISH",
                      "ai_score": trade["ai_score"], "estimated_probability": trade["probability"],
                      "outcome": None})
         self._write(rows)
@@ -47,3 +51,46 @@ class OutcomeRepository:
         if len(rows) < minimum_samples:
             return None
         return round(sum(row["outcome"] == "WIN" for row in rows) * 100 / len(rows), 2)
+
+    def contextual_probability(self, setup: str, market_regime: str,
+                               minimum_samples: int = 20) -> float | None:
+        rows = [row for row in self._read()
+                if row.get("setup") == setup and row.get("market_regime") == market_regime
+                and row.get("outcome") in {"WIN", "LOSS"}]
+        if len(rows) < minimum_samples:
+            return None
+        return round(sum(row["outcome"] == "WIN" for row in rows) * 100 / len(rows), 2)
+
+    def learning_summary(self) -> dict[str, Any]:
+        completed = [row for row in self._read() if row.get("outcome") in {"WIN", "LOSS"}]
+
+        def grouped(field: str) -> list[dict[str, Any]]:
+            groups: dict[str, list[dict[str, Any]]] = {}
+            for row in completed:
+                value = row.get(field)
+                if value:
+                    groups.setdefault(str(value), []).append(row)
+            result = []
+            for value, rows in groups.items():
+                wins = sum(row["outcome"] == "WIN" for row in rows)
+                result.append({field: value, "recommendations": len(rows), "wins": wins,
+                               "losses": len(rows) - wins,
+                               "win_rate_percent": round(wins * 100 / len(rows), 2),
+                               "confidence": "CALIBRATED" if len(rows) >= 20 else "EARLY"})
+            return sorted(result, key=lambda item: (item["recommendations"], item["win_rate_percent"]), reverse=True)
+
+        setup_regime: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for row in completed:
+            if row.get("setup") and row.get("market_regime"):
+                setup_regime.setdefault((row["setup"], row["market_regime"]), []).append(row)
+        combinations = []
+        for (setup, regime), rows in setup_regime.items():
+            wins = sum(row["outcome"] == "WIN" for row in rows)
+            combinations.append({"setup": setup, "market_regime": regime, "recommendations": len(rows),
+                                 "wins": wins, "losses": len(rows) - wins,
+                                 "win_rate_percent": round(wins * 100 / len(rows), 2),
+                                 "confidence": "CALIBRATED" if len(rows) >= 20 else "EARLY"})
+        combinations.sort(key=lambda item: item["recommendations"], reverse=True)
+        return {"completed_outcomes": len(completed), "minimum_calibration_samples": 20,
+                "by_symbol": grouped("symbol"), "by_setup": grouped("setup"),
+                "by_market_regime": grouped("market_regime"), "by_setup_and_regime": combinations}

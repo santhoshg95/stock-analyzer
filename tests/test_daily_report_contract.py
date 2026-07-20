@@ -12,6 +12,10 @@ class DailyReportContractTests(unittest.TestCase):
     @patch("src.workflow.daily_trading_assistant.OutcomeRepository")
     def test_cache_report_contains_actionable_trade_fields(self, outcome_repository):
         outcome_repository.return_value.calibrated_probability.return_value = None
+        outcome_repository.return_value.contextual_probability.return_value = None
+        outcome_repository.return_value.learning_summary.return_value = {
+            "completed_outcomes": 0, "by_symbol": [], "by_setup_and_regime": []
+        }
         outcome_repository.return_value.record_recommendation.return_value = "test-recommendation"
         platform = TradingPlatform(
             settings=PlatformSettings(market_data_source="cache", capital=100_000, risk_percent=1)
@@ -19,11 +23,22 @@ class DailyReportContractTests(unittest.TestCase):
         report = platform.daily_report(limit=1, minimum_score=40)
 
         self.assertEqual(report["report_type"], "daily_trading_assistant")
-        self.assertEqual(len(report["trades"]), 1)
-        trade = report["trades"][0]
-        self.assertIn("levels", trade)
-        self.assertIn("risk", trade)
-        self.assertIn("option_strategy", trade)
-        self.assertIn("stock_liquidity", trade)
-        self.assertIn("trust", trade)
+        self.assertIn("filter_stages", report)
+        self.assertIn("sector_ranking", report)
+        self.assertEqual(
+            report["summary"]["trades_generated"] + report["summary"]["watchlisted"]
+            + report["summary"]["rejected"],
+            report["summary"]["stocks_qualified"],
+        )
+        for trade in report["trades"] + report["watchlist"]:
+            self.assertIn("levels", trade)
+            self.assertIn("risk", trade)
+            self.assertIn("option_strategy", trade)
+            self.assertIn("stock_liquidity", trade)
+            self.assertIn("trust", trade)
+            self.assertIn("model_confidence", trade)
+            self.assertIn("trade_eligibility", trade)
+            self.assertIn("trade_readiness", trade)
+            self.assertIn("current_month_seasonality", trade)
+            self.assertTrue(trade["option_budget_policy"]["stock_eligibility_independent"])
         self.assertIn("TODAY'S MARKET SUMMARY", DailyReportPresenter.render(report))

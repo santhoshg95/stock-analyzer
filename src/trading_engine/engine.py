@@ -11,6 +11,7 @@ from src.data_provider.provider import DataProvider
 from src.indicators.pipeline import IndicatorPipeline
 from src.trade_setup.entry_analyzer import EntryAnalyzer
 from src.decision.decision_engine import DecisionEngine
+from src.decision.setup_entry_evaluator import SetupEntryEvaluator
 
 
 class TradingEngine:
@@ -73,6 +74,10 @@ class TradingEngine:
 
         candlestick = PatternDetector.detect(df)
 
+        setup_evaluation = SetupEntryEvaluator.evaluate(
+            df, analysis, entry, breakout, candlestick
+        )
+
         # --------------------------------------------------
         # Final Decision
         # --------------------------------------------------
@@ -82,6 +87,7 @@ class TradingEngine:
                 "analysis": analysis,
                 "entry": entry,
                 "breakout": breakout,
+                "setup_evaluation": setup_evaluation,
             }
         )
 
@@ -102,5 +108,7 @@ class TradingEngine:
             "market_quality": self._market_quality(df),
 
             "decision": decision
+
+            ,"setup_evaluation": setup_evaluation
 
         }

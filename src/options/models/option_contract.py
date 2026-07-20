@@ -45,5 +45,8 @@ class OptionContract:
 
     rho: float | None = None
 
+    # Exchange quote's percentage/net change when supplied by the broker.
+    price_change: float | None = None
+
     # Exchange lot size, supplied by the live instrument master when available.
     lot_size: int = 1

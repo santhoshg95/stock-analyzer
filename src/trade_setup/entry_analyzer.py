@@ -43,6 +43,8 @@ class EntryAnalyzer:
 
             "risk_reward": risk_data["risk_reward"],
 
-            "quality": risk_data["quality"]
+            "quality": risk_data["quality"],
+
+            "atr": float(df.iloc[-1]["ATR"])
 
         }

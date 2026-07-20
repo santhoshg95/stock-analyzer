@@ -29,6 +29,8 @@ Runtime defaults can be configured without changing source code:
 export TRADING_CAPITAL=100000
 export TRADING_RISK_PERCENT=1
 export MARKET_DATA_SOURCE=kite
+export OPTION_CAPITAL=2500000
+export OPTION_RISK_PER_TRADE=100000
 ```
 
 ## Application API

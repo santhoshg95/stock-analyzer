@@ -17,6 +17,12 @@ class KiteOptionChainProvider:
     def __init__(self, kite):
         self.kite = kite
         self.oi_cache_path = Path("data/cache/option_chain/oi_snapshots.json")
+        self._instruments = None
+
+    def _load_instruments(self):
+        if self._instruments is None:
+            self._instruments = self.kite.instruments("NFO")
+        return self._instruments
 
     def _previous_oi(self):
         try:
@@ -32,7 +38,7 @@ class KiteOptionChainProvider:
         symbol = symbol.upper()
         today = date.today()
         instruments = [
-            item for item in self.kite.instruments("NFO")
+            item for item in self._load_instruments()
             if item.get("name", "").upper() == symbol
             and item.get("instrument_type") in {"CE", "PE"}
             and item.get("expiry")
@@ -75,6 +81,7 @@ class KiteOptionChainProvider:
                 delta=greeks["delta"] if greeks else None, gamma=greeks["gamma"] if greeks else None,
                 theta=greeks["theta"] if greeks else None, vega=greeks["vega"] if greeks else None,
                 rho=greeks["rho"] if greeks else None,
+                price_change=float(quote.get("net_change")) if quote.get("net_change") is not None else None,
                 lot_size=int(item.get("lot_size") or 1),
             )
             (calls if contract.option_type == "CE" else puts).append(contract)

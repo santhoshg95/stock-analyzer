@@ -51,7 +51,7 @@ class PositionSizingEngine:
 
         risk_amount = capital * (risk_percent / 100)
 
-        risk_per_share = abs(entry - stop_loss)
+        risk_per_share = abs(entry - stop_loss) + entry * 0.001
 
         if risk_per_share == 0:
 

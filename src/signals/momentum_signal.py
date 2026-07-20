@@ -78,7 +78,15 @@ class MomentumSignal:
         # Final Direction
         # --------------------------------------------------
 
-        if score >= 80:
+        if rsi < 30 and macd > macd_signal:
+
+            direction = "EARLY REVERSAL"
+
+        elif (
+            score >= 80
+            and float(latest["Close"]) > float(latest["EMA20"]) > float(latest["EMA50"])
+            and float(latest.get("RVOL", 0)) >= 1.2
+        ):
 
             direction = "STRONG BULLISH"
 
