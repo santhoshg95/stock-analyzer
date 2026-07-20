@@ -64,7 +64,7 @@ class TradingPlatform:
             if self.settings.market_data_source == "kite"
             else DataProvider()
         )
-        self.engine = TradingEngine(provider=self.provider)
+        self.engine = TradingEngine(provider=self.provider, settings=self.settings)
         self.paper_broker = paper_broker or PaperBroker(starting_cash=self.settings.capital)
         self._option_chain_provider = None
         self._option_cache: dict[tuple, tuple[float, dict[str, Any]]] = {}
@@ -167,13 +167,13 @@ class TradingPlatform:
         try:
             report = self.engine.analyze(symbol)
         except TokenException as exc:
-            logger.error("Option authentication failed for %s: %s", candidate["symbol"], exc)
+            logger.error("Market-data authentication failed for %s: %s", symbol, exc)
             raise AuthenticationError(
                 "Zerodha Kite authentication failed. Update KITE_API_KEY and "
                 "generate a fresh KITE_ACCESS_TOKEN before running the platform."
             ) from exc
         except RequestException as exc:
-            logger.error("Option network request failed for %s: %s", candidate["symbol"], exc)
+            logger.error("Market-data network request failed for %s: %s", symbol, exc)
             raise DataUnavailableError(
                 "Unable to reach Zerodha Kite. Check your network connection and try again."
             ) from exc
@@ -307,11 +307,11 @@ class TradingPlatform:
             liquidity = self._stock_liquidity(analysis)
             # Avoid names that are hard to enter/exit even if their chart score
             # is attractive. The threshold is deliberately modest for F&O names.
-            if liquidity["score"] < 40:
+            if liquidity["score"] < self.settings.candidate_min_liquidity_score:
                 return None
             increment("liquidity_passed")
             trust = self._trust_score(analysis, liquidity, report["market_quality"])
-            if trust["score"] < 55:
+            if trust["score"] < self.settings.candidate_min_trust_score:
                 return None
             increment("trust_passed")
             return {
@@ -323,6 +323,7 @@ class TradingPlatform:
                 "current_price": analysis["current_price"],
                 "stock_liquidity": liquidity,
                 "trust": trust,
+                "historical_gap_factor": round(1 + min(1, report["market_quality"].get("large_gap_days", 0) / 10), 3),
                 "risk_reward": report["trade_plan"]["risk_reward"],
                 "candlestick": report["candlestick"],
                 "setup_evaluation": report["setup_evaluation"],
@@ -501,7 +502,7 @@ class TradingPlatform:
                 risk_budget=self.settings.option_risk_per_trade,
                 capital_available=self.settings.option_capital,
             )
-            validation = OptionEntryValidator.validate(chain, trade, direction)
+            validation = OptionEntryValidator.validate(chain, trade, direction, self.settings)
             rejection = trade.get("rejection")
             if trade["available"] and not validation["approved"]:
                 rejection = {"code": "ENTRY_VALIDATION_FAILED", "category": "EXECUTION",

@@ -73,8 +73,8 @@ class EventRiskTests(unittest.TestCase):
         oil = engine.assess_candidate({"symbol": "OIL", "sector": "ENERGY"}, daily, base_readiness=88, as_of=NOW)
         hpcl = engine.assess_candidate({"symbol": "HPCL", "sector": "ENERGY"}, daily, base_readiness=88, as_of=NOW)
         airline = engine.assess_candidate({"symbol": "INDIGO", "sector": "AVIATION"}, daily, base_readiness=88, as_of=NOW)
-        self.assertEqual(hpcl.event_direction, "NEGATIVE")
-        self.assertEqual(airline.event_direction, "NEGATIVE")
+        self.assertEqual(hpcl.event_direction, "NEGATIVE_AND_VOLATILE")
+        self.assertEqual(airline.event_direction, "NEGATIVE_AND_VOLATILE")
         self.assertLess(hpcl.adjusted_readiness, oil.adjusted_readiness)
         self.assertLess(airline.adjusted_readiness, oil.adjusted_readiness)
 
@@ -138,9 +138,11 @@ class EventRiskTests(unittest.TestCase):
         stale = engine.assess_candidate({"symbol": "SBIN", "sector": "BANKING"},
                                         context(stale_event), base_readiness=80, as_of=NOW)
         self.assertEqual(unavailable.data_state, "UNAVAILABLE")
-        self.assertEqual(unavailable.uncertainty_penalty, 5)
+        self.assertEqual(unavailable.event_data_uncertainty_penalty, 5)
+        self.assertEqual(unavailable.readiness_penalty, 0)
         self.assertEqual(stale.data_state, "STALE")
-        self.assertEqual(stale.uncertainty_penalty, 8)
+        self.assertEqual(stale.event_data_uncertainty_penalty,
+                         engine.settings.event_data_partial_coverage_penalty)
 
     def test_zscore_can_trigger_commodity_event_below_absolute_threshold(self):
         engine = service()
@@ -203,6 +205,28 @@ class EventRiskTests(unittest.TestCase):
                                         base_readiness=80, as_of=NOW)
             self.assertEqual(len(calls), 1)
 
+    def test_shared_context_accepts_market_snapshot_vix_quote(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = EventRiskService(settings(), repository=EventRepository(directory))
+            daily = engine.build_daily_context(
+                {"regime": "NEUTRAL", "vix": {"price": 26.5, "change_percent": 4.2}},
+                as_of=NOW,
+            )
+            market_events = [item for item in daily.events if item.category == EventCategory.MARKET_WIDE]
+            self.assertEqual(len(market_events), 1)
+            self.assertIn("VIX 26.5", market_events[0].reasons[0])
+
+    def test_invalid_market_snapshot_vix_does_not_break_shared_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = EventRiskService(settings(), repository=EventRepository(directory))
+            daily = engine.build_daily_context(
+                {"regime": "HIGH_VOLATILITY", "vix": {"price": None}},
+                as_of=NOW,
+            )
+            market_events = [item for item in daily.events if item.category == EventCategory.MARKET_WIDE]
+            self.assertEqual(len(market_events), 1)
+            self.assertIn("VIX 0.0", market_events[0].reasons[0])
+
     def test_every_mapped_sector_has_an_explicit_event_profile(self):
         engine = service()
         mapped = set(pd.read_csv("resources/sector_mapping.csv")["Sector"].str.upper())
@@ -244,7 +268,7 @@ class EventRiskTests(unittest.TestCase):
         thermal = engine.assess_candidate({"symbol": "ADANIPOWER", "sector": "POWER"},
                                          context(coal), base_readiness=85, as_of=NOW)
         self.assertEqual(renewable.event_direction, "MIXED")
-        self.assertEqual(thermal.event_direction, "NEGATIVE")
+        self.assertEqual(thermal.event_direction, "NEGATIVE_AND_VOLATILE")
         self.assertLess(thermal.adjusted_readiness, renewable.adjusted_readiness)
 
 

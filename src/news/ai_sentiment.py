@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import importlib.util
 from functools import lru_cache
 import logging
 from pathlib import Path
@@ -113,6 +114,17 @@ class AISentimentAnalyzer:
         if loaded:
             logger.info("FinBERT model load time: %.3fs (local cache)", elapsed)
         return elapsed
+
+    def dependency_health(self) -> dict[str, Any]:
+        """Report entity-model readiness without triggering model downloads."""
+        spacy_installed = importlib.util.find_spec("spacy") is not None
+        entity_model_installed = importlib.util.find_spec(self.spacy_model) is not None
+        return {
+            "spacy": "AVAILABLE" if spacy_installed else "MISSING",
+            "entity_model": self.spacy_model,
+            "entity_model_status": "AVAILABLE" if entity_model_installed else "MISSING",
+            "entity_dependent_classification": "ENABLED" if entity_model_installed else "DISABLED_SAFE",
+        }
 
     def _load(self) -> float:
         model_load_seconds = self.load_finbert()
@@ -227,6 +239,7 @@ class AISentimentAnalyzer:
             ],
             "trade_impact": trade_impact, "article_assessments": assessments,
             "entities": all_entities,
+            "entity_model_available": self._entity_model_available,
             "analysis_provider": ("LOCAL_FINBERT_SPACY" if self._entity_model_available
                                   else "LOCAL_FINBERT"),
             "timings": {

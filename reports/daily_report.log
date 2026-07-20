@@ -1,278 +1,88 @@
-2026-07-20 15:57:32,718 INFO src.application.platform: Technical scan: 7.451s for 215 symbols
-2026-07-20 15:57:32,718 INFO src.application.platform: Historical/option enrichment: 0.000s for 20 candidates
-2026-07-20 15:57:32,719 INFO src.application.platform: Suggestion stages completed: {'universe_seconds': 1.317, 'technical_scan_seconds': 7.451, 'historical_and_options_seconds': 0.0, 'total_seconds': 8.769}
-2026-07-20 15:57:32,720 INFO src.workflow.daily_trading_assistant: Daily stage screening: 8.771s
-2026-07-20 15:57:35,570 ERROR src.workflow.daily_trading_assistant: Shared event context failed
-Traceback (most recent call last):
-  File "/workspaces/stock-analyzer/src/workflow/daily_trading_assistant.py", line 801, in generate
-    self.event_context = self.event_service.build_daily_context(market_context)
-                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/workspaces/stock-analyzer/src/event_risk/service.py", line 247, in build_daily_context
-    vix = float((market_context or {}).get("vix", 0) or 0)
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: float() argument must be a string or a real number, not 'dict'
-2026-07-20 15:57:35,851 WARNING src.application.platform: Option instrument lookup failed for UNIONBANK: No UNIONBANK option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:35,962 WARNING src.application.platform: Option instrument lookup failed for PREMIERENE: No PREMIERENE option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:36,076 WARNING src.application.platform: Option instrument lookup failed for LICHSGFIN: No LICHSGFIN option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:36,194 WARNING src.application.platform: Option instrument lookup failed for HINDPETRO: No HINDPETRO option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:36,305 WARNING src.application.platform: Option instrument lookup failed for SOLARINDS: No SOLARINDS option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:36,409 WARNING src.application.platform: Option instrument lookup failed for FEDERALBNK: No FEDERALBNK option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:36,511 WARNING src.application.platform: Option instrument lookup failed for IEX: No IEX option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:36,659 WARNING src.application.platform: Option instrument lookup failed for BANKINDIA: No BANKINDIA option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:36,824 WARNING src.application.platform: Option instrument lookup failed for PNB: No PNB option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:36,927 WARNING src.application.platform: Option instrument lookup failed for JSWSTEEL: No JSWSTEEL option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:37,051 WARNING src.application.platform: Option instrument lookup failed for ULTRACEMCO: No ULTRACEMCO option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:37,993 WARNING src.application.platform: Option instrument lookup failed for SBIN: No SBIN option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:38,628 WARNING src.application.platform: Option instrument lookup failed for GLENMARK: No GLENMARK option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:39,471 WARNING src.application.platform: Option instrument lookup failed for OIL: No OIL option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:41,446 WARNING src.application.platform: Option instrument lookup failed for INDIANB: No INDIANB option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:41,592 WARNING src.application.platform: Option instrument lookup failed for BAJFINANCE: No BAJFINANCE option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:41,711 WARNING src.application.platform: Option instrument lookup failed for VOLTAS: No VOLTAS option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:41,842 WARNING src.application.platform: Option instrument lookup failed for SIEMENS: No SIEMENS option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:41,979 WARNING src.application.platform: Option instrument lookup failed for PNBHOUSING: No PNBHOUSING option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:42,097 WARNING src.application.platform: Option instrument lookup failed for HAL: No HAL option expiries in requested month 2026-08 within the configured DTE range
-2026-07-20 15:57:42,098 INFO src.workflow.daily_trading_assistant: Daily stage finalist enrichment: 6.526s
-2026-07-20 15:57:44,095 INFO src.workflow.daily_trading_assistant: Daily stage market/relative strength: 11.375s
-2026-07-20 15:57:44,099 INFO src.event_risk.service: UNIONBANK event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=82.5->77.5 size=1.00
-2026-07-20 15:57:44,101 INFO src.event_risk.service: PREMIERENE event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=79.9->74.9 size=1.00
-2026-07-20 15:57:44,105 INFO src.event_risk.service: LICHSGFIN event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=78.8->73.8 size=1.00
-2026-07-20 15:57:44,107 INFO src.event_risk.service: HINDPETRO event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=57.5->52.5 size=1.00
-2026-07-20 15:57:44,111 INFO src.event_risk.service: SOLARINDS event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=72.4->67.4 size=1.00
-2026-07-20 15:57:44,115 INFO src.event_risk.service: FEDERALBNK event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=71.6->66.6 size=1.00
-2026-07-20 15:57:44,117 INFO src.event_risk.service: IEX event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=59.7->54.7 size=1.00
-2026-07-20 15:57:44,119 INFO src.event_risk.service: BANKINDIA event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=60.9->55.9 size=1.00
-2026-07-20 15:57:44,122 INFO src.event_risk.service: PNB event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=67.6->62.6 size=1.00
-2026-07-20 15:57:44,126 INFO src.event_risk.service: JSWSTEEL event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=82.9->77.9 size=1.00
-2026-07-20 15:57:44,129 INFO src.event_risk.service: ULTRACEMCO event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=79.5->74.5 size=1.00
-2026-07-20 15:57:44,134 INFO src.event_risk.service: SBIN event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=79.6->74.6 size=1.00
-2026-07-20 15:57:44,138 INFO src.event_risk.service: GLENMARK event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=78.2->73.2 size=1.00
-2026-07-20 15:57:44,141 INFO src.event_risk.service: OIL event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=83.7->78.7 size=1.00
-2026-07-20 15:57:44,146 INFO src.event_risk.service: INDIANB event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=62.3->57.3 size=1.00
-2026-07-20 15:57:44,149 INFO src.event_risk.service: BAJFINANCE event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=70.7->65.7 size=1.00
-2026-07-20 15:57:44,151 INFO src.event_risk.service: VOLTAS event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=62.0->57.0 size=1.00
-2026-07-20 15:57:44,154 INFO src.event_risk.service: SIEMENS event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=61.7->56.7 size=1.00
-2026-07-20 15:57:44,159 INFO src.event_risk.service: PNBHOUSING event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=58.5->53.5 size=1.00
-2026-07-20 15:57:44,161 INFO src.event_risk.service: HAL event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=56.7->51.7 size=1.00
-2026-07-20 15:57:44,163 INFO src.workflow.daily_trading_assistant: Daily stage preliminary review: 0.067s
-2026-07-20 15:57:56,187 INFO src.news.ai_sentiment: FinBERT model load time: 32.238s (local cache)
-2026-07-20 15:57:56,188 INFO src.workflow.daily_trading_assistant: News model preload: load=32.238s wall=32.238s wait_after_screening=12.024s
-2026-07-20 15:57:56,535 INFO src.news.analysis_service: News network time for PREMIERENE: 0.338s
-2026-07-20 15:57:56,572 INFO src.news.analysis_service: News network time for UNIONBANK: 0.384s
-2026-07-20 15:57:56,695 INFO src.news.analysis_service: News network time for JSWSTEEL: 0.502s
-2026-07-20 15:57:56,746 INFO src.news.analysis_service: News network time for OIL: 0.555s
-2026-07-20 15:57:58,162 WARNING src.news.ai_sentiment: spaCy model en_core_web_sm unavailable; continuing with FinBERT sentiment and no entities: [E050] Can't find model 'en_core_web_sm'. It doesn't seem to be a Python package or a valid path to a data directory.
-2026-07-20 15:58:00,768 INFO src.news.ai_sentiment: FinBERT inference time: 2.605s for 8 articles
-2026-07-20 15:58:00,987 INFO src.news.analysis_service: News network time for LICHSGFIN: 0.217s
-2026-07-20 15:58:02,208 INFO src.news.ai_sentiment: FinBERT inference time: 1.439s for 8 articles
-2026-07-20 15:58:02,559 INFO src.news.analysis_service: News network time for SBIN: 0.346s
-2026-07-20 15:58:03,524 INFO src.news.ai_sentiment: FinBERT inference time: 1.315s for 8 articles
-2026-07-20 15:58:03,854 INFO src.news.analysis_service: News network time for ULTRACEMCO: 0.328s
-2026-07-20 15:58:05,000 INFO src.news.ai_sentiment: FinBERT inference time: 1.475s for 8 articles
-2026-07-20 15:58:05,543 INFO src.news.analysis_service: News network time for IEX: 0.541s
-2026-07-20 15:58:06,947 INFO src.news.ai_sentiment: FinBERT inference time: 1.947s for 8 articles
-2026-07-20 15:58:08,648 INFO src.news.ai_sentiment: FinBERT inference time: 1.700s for 8 articles
-2026-07-20 15:58:10,048 INFO src.news.ai_sentiment: FinBERT inference time: 1.395s for 8 articles
-2026-07-20 15:58:11,596 INFO src.news.ai_sentiment: FinBERT inference time: 1.547s for 8 articles
-2026-07-20 15:58:11,598 INFO src.workflow.daily_trading_assistant: Daily stage targeted news: 15.410s for 8 stocks
-2026-07-20 15:58:11,598 INFO src.workflow.daily_trading_assistant: Daily news timings: model_load=32.238s inference=13.425s network=3.211s wall=15.410s
-2026-07-20 15:58:11,603 INFO src.event_risk.service: UNIONBANK event risk: score=43.53 level=MEDIUM direction=VOLATILITY_ONLY readiness=82.8->69.9 size=0.75
-2026-07-20 15:58:11,606 INFO src.event_risk.service: PREMIERENE event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=79.9->74.9 size=1.00
-2026-07-20 15:58:11,608 INFO src.event_risk.service: LICHSGFIN event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=78.9->73.9 size=1.00
-2026-07-20 15:58:11,610 INFO src.event_risk.service: HINDPETRO event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=57.5->52.5 size=1.00
-2026-07-20 15:58:11,612 INFO src.event_risk.service: SOLARINDS event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=72.4->67.4 size=1.00
-2026-07-20 15:58:11,614 INFO src.event_risk.service: FEDERALBNK event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=71.6->66.6 size=1.00
-2026-07-20 15:58:11,616 INFO src.event_risk.service: IEX event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=59.8->54.8 size=1.00
-2026-07-20 15:58:11,619 INFO src.event_risk.service: BANKINDIA event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=60.9->55.9 size=1.00
-2026-07-20 15:58:11,622 INFO src.event_risk.service: PNB event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=67.6->62.6 size=1.00
-2026-07-20 15:58:11,624 INFO src.event_risk.service: JSWSTEEL event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=83.2->78.2 size=1.00
-2026-07-20 15:58:11,627 INFO src.event_risk.service: ULTRACEMCO event risk: score=46.83 level=MEDIUM direction=VOLATILITY_ONLY readiness=79.5->66.6 size=0.75
-2026-07-20 15:58:11,629 INFO src.event_risk.service: SBIN event risk: score=45.01 level=MEDIUM direction=VOLATILITY_ONLY readiness=81.0->68.1 size=0.75
-2026-07-20 15:58:11,632 INFO src.event_risk.service: GLENMARK event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=78.2->73.2 size=1.00
-2026-07-20 15:58:11,634 INFO src.event_risk.service: OIL event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=83.4->78.4 size=1.00
-2026-07-20 15:58:11,635 INFO src.event_risk.service: INDIANB event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=62.3->57.3 size=1.00
-2026-07-20 15:58:11,637 INFO src.event_risk.service: BAJFINANCE event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=70.7->65.7 size=1.00
-2026-07-20 15:58:11,639 INFO src.event_risk.service: VOLTAS event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=62.0->57.0 size=1.00
-2026-07-20 15:58:11,641 INFO src.event_risk.service: SIEMENS event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=61.7->56.7 size=1.00
-2026-07-20 15:58:11,643 INFO src.event_risk.service: PNBHOUSING event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=58.5->53.5 size=1.00
-2026-07-20 15:58:11,645 INFO src.event_risk.service: HAL event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=56.7->51.7 size=1.00
-2026-07-20 15:58:11,645 INFO src.workflow.daily_trading_assistant: Daily stage final review: 0.047s
-2026-07-20 15:58:11,646 INFO src.workflow.daily_trading_assistant: Daily report stages completed: {'screening_seconds': 8.771, 'market_and_relative_strength_seconds': 11.375, 'preliminary_review_seconds': 0.067, 'targeted_news_seconds': 15.41, 'news_model_load_seconds': 32.238, 'news_model_preload_wait_seconds': 12.024, 'news_inference_seconds': 13.425, 'news_network_seconds': 3.211, 'final_review_seconds': 0.047, 'total_seconds': 47.697, 'news_stocks_requested': 8, 'candidates_enriched': 20, 'event_context_fetch_seconds': 0, 'event_sources_requested': 0, 'events_detected': 0, 'event_clusters_created': 0, 'event_candidate_scoring_seconds': 0.022, 'event_total_seconds': 0.022}
+2026-07-20 19:52:38,770 INFO src.news.ai_sentiment: FinBERT model load time: 17.837s (local cache)
+2026-07-20 19:53:35,950 INFO src.application.platform: Technical scan: 74.024s for 215 symbols
+2026-07-20 19:53:35,951 INFO src.application.platform: Historical/option enrichment: 0.000s for 20 candidates
+2026-07-20 19:53:35,951 INFO src.application.platform: Suggestion stages completed: {'universe_seconds': 0.992, 'technical_scan_seconds': 74.024, 'historical_and_options_seconds': 0.0, 'total_seconds': 75.018}
+2026-07-20 19:53:35,953 INFO src.workflow.daily_trading_assistant: Daily stage screening: 75.020s
+2026-07-20 19:53:38,030 INFO src.event_risk.service: Event context: 1 raw items, 1 clusters, fetch=0.241s
+2026-07-20 19:53:41,877 INFO src.workflow.daily_trading_assistant: Daily stage finalist enrichment: 3.846s
+2026-07-20 19:53:44,805 INFO src.workflow.daily_trading_assistant: Daily stage market/relative strength: 8.852s
+2026-07-20 19:53:44,807 INFO src.event_risk.service: UNIONBANK event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=66.5->64.5 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,809 INFO src.event_risk.service: LICHSGFIN event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=64.3->62.3 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,811 INFO src.event_risk.service: HINDPETRO event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=44.5->42.5 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,813 INFO src.event_risk.service: FEDERALBNK event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=71.6->69.6 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,815 INFO src.event_risk.service: IEX event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=45.3->43.3 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,817 INFO src.event_risk.service: BANKINDIA event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=61.2->59.2 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,820 INFO src.event_risk.service: PNB event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=68.8->66.8 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,822 INFO src.event_risk.service: JSWSTEEL event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=79.1->77.1 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,824 INFO src.event_risk.service: ULTRACEMCO event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=68.6->66.6 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,826 INFO src.event_risk.service: SBIN event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=69.7->67.7 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,829 INFO src.event_risk.service: PREMIERENE event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=76.6->74.6 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,831 INFO src.event_risk.service: OIL event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=67.3->65.3 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,833 INFO src.event_risk.service: INDIANB event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=63.0->61.0 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,836 INFO src.event_risk.service: GLENMARK event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=77.4->75.4 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,838 INFO src.event_risk.service: BAJFINANCE event risk: score=5.61 level=VERY_LOW direction=NEGATIVE readiness=69.3->62.3 event_penalty=5.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,840 INFO src.event_risk.service: SIEMENS event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=61.2->59.2 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,842 INFO src.event_risk.service: PNBHOUSING event risk: score=5.54 level=VERY_LOW direction=NEGATIVE readiness=57.6->50.6 event_penalty=5.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,844 INFO src.event_risk.service: SRF event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=55.6->53.6 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,846 INFO src.event_risk.service: HAL event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=55.4->53.4 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,849 INFO src.event_risk.service: AMBER event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=56.0->54.0 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:44,849 INFO src.workflow.daily_trading_assistant: Daily stage preliminary review: 0.044s
+2026-07-20 19:53:44,850 INFO src.workflow.daily_trading_assistant: News model preload: load=17.837s wall=17.838s wait_after_screening=0.000s
+2026-07-20 19:53:45,112 INFO src.news.analysis_service: News network time for FEDERALBNK: 0.257s
+2026-07-20 19:53:45,259 INFO src.news.analysis_service: News network time for JSWSTEEL: 0.409s
+2026-07-20 19:53:45,362 INFO src.news.analysis_service: News network time for GLENMARK: 0.511s
+2026-07-20 19:53:45,382 INFO src.news.analysis_service: News network time for PREMIERENE: 0.528s
+2026-07-20 19:53:46,308 WARNING src.news.ai_sentiment: spaCy model en_core_web_sm unavailable; continuing with FinBERT sentiment and no entities: [E050] Can't find model 'en_core_web_sm'. It doesn't seem to be a Python package or a valid path to a data directory.
+2026-07-20 19:53:48,200 INFO src.news.ai_sentiment: FinBERT inference time: 1.891s for 8 articles
+2026-07-20 19:53:49,730 INFO src.news.ai_sentiment: FinBERT inference time: 1.527s for 8 articles
+2026-07-20 19:53:51,162 INFO src.news.ai_sentiment: FinBERT inference time: 1.432s for 8 articles
+2026-07-20 19:53:52,290 INFO src.news.ai_sentiment: FinBERT inference time: 1.127s for 8 articles
+2026-07-20 19:53:52,306 INFO src.workflow.daily_trading_assistant: Daily stage targeted news: 7.456s for 4 stocks
+2026-07-20 19:53:52,307 INFO src.workflow.daily_trading_assistant: Daily news timings: model_load=17.837s inference=5.977s network=1.705s wall=7.456s
+2026-07-20 19:53:52,318 INFO src.event_risk.service: UNIONBANK event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=66.5->64.5 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,335 INFO src.event_risk.service: LICHSGFIN event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=64.3->62.3 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,339 INFO src.event_risk.service: HINDPETRO event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=44.5->42.5 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,344 INFO src.event_risk.service: FEDERALBNK event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=71.9->69.9 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,348 INFO src.event_risk.service: IEX event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=45.3->43.3 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,353 INFO src.event_risk.service: BANKINDIA event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=61.2->59.2 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,357 INFO src.event_risk.service: PNB event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=68.8->66.8 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,362 INFO src.event_risk.service: JSWSTEEL event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=79.5->77.5 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,367 INFO src.event_risk.service: ULTRACEMCO event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=68.6->66.6 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,371 INFO src.event_risk.service: SBIN event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=69.7->67.7 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,397 INFO src.event_risk.service: PREMIERENE event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=76.6->74.6 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,413 INFO src.event_risk.service: OIL event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=67.3->65.3 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,428 INFO src.event_risk.service: INDIANB event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=63.0->61.0 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,460 INFO src.event_risk.service: GLENMARK event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=77.9->75.9 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,465 INFO src.event_risk.service: BAJFINANCE event risk: score=5.61 level=VERY_LOW direction=NEGATIVE readiness=69.3->62.3 event_penalty=5.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,470 INFO src.event_risk.service: SIEMENS event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=61.2->59.2 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,474 INFO src.event_risk.service: PNBHOUSING event risk: score=5.54 level=VERY_LOW direction=NEGATIVE readiness=57.6->50.6 event_penalty=5.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,482 INFO src.event_risk.service: SRF event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=55.6->53.6 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,486 INFO src.event_risk.service: HAL event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=55.4->53.4 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,491 INFO src.event_risk.service: AMBER event risk: score=0.00 level=VERY_LOW direction=UNCERTAIN readiness=56.0->54.0 event_penalty=0.0 data_uncertainty_penalty=2.0 size=1.00
+2026-07-20 19:53:52,497 INFO src.workflow.daily_trading_assistant: Daily stage final review: 0.188s
+2026-07-20 19:53:52,498 INFO src.workflow.daily_trading_assistant: Daily report stages completed: {'screening_seconds': 75.02, 'market_and_relative_strength_seconds': 8.852, 'preliminary_review_seconds': 0.044, 'targeted_news_seconds': 7.456, 'news_model_load_seconds': 17.837, 'news_model_preload_wait_seconds': 0.0, 'news_inference_seconds': 5.977, 'news_network_seconds': 1.705, 'final_review_seconds': 0.188, 'total_seconds': 91.565, 'news_stocks_requested': 4, 'candidates_enriched': 20, 'event_context_fetch_seconds': 0.241, 'event_classification_seconds': 0.0, 'event_sources_requested': 4, 'events_detected': 1, 'event_clusters_created': 1, 'event_sources_available': 1, 'event_candidate_scoring_seconds': 0.016, 'event_total_seconds': 0.257}
 ====================================================================
                     AI TRADING ASSISTANT
 ====================================================================
 DATE                 : 2026-07-20
 MARKET               : UNCERTAIN_BEARISH
-MARKET CONFIDENCE    : 10%
+MARKET CONFIDENCE    : 30%
 RANKING MODE         : EXPECTED_VALUE
 ====================================================================
-WATCHLIST #1 — UNIONBANK
+WATCHLIST #1 — JSWSTEEL
 --------------------------------------------------------------------
-Setup / action       : BREAKOUT / BUY
-Market alignment     : UNCERTAIN
-Sector               : BANKING
-Current price        : ₹175.76
-AI score             : 78.54/100
-Quality grade        : A — Excellent
-Quality score        : 89.0/100
-News sentiment       : NEUTRAL (+10.9)
-News collection      : FETCHED (8 articles)
-News sentiment state : ANALYZED
-News analysis        : LOCAL_FINBERT / ProsusAI/finbert
-News materiality     : LOW / impact NONE
-Model confidence     : 95%
-Estimated probability: 92.64%
-Trade eligibility    : WATCHLIST
-Strategy             : Swing Breakout (3-5 trading days)
-Trend / momentum     : STRONG BULLISH / STRONG BULLISH
-Stock liquidity      : EXCELLENT (347.45 cr avg/day)
-F&O trust filter      : TRUSTED (95.0/100)
-Sector / relative str: NEUTRAL / STRONG
-Support / resistance : ₹173.68 / ₹176.88
-Entry / stop         : ₹175.76 / ₹171.44
-Targets              : ₹176.88, ₹185.97, ₹193.04
-Target model         : BREAKOUT_WEIGHTED_TARGETS (70.0% breakout probability)
-Expected reward      : ₹7.08 (nearest target ₹1.12)
-Expected risk/reward : 1:1.64
-Expected value       : ₹6.24 (+1.445R)
-Execution readiness  : 69.91% — WATCH_INTRADAY (Watch intraday)
-Execution policy     : CAUTIOUS — execute at 85.0%
-Position size        : 83 shares (max risk ₹375.00)
-Risk scaling         : 50% position; 0.375% effective risk
-Option account       : ₹2,500,000.00 capital; ₹100,000.00 max risk/trade
-Option execution     : UNAVAILABLE_OR_REJECTED
-Option context       : NEUTRAL — score adjustment only
-EVENT RISK
---------------------------------------------------------------------
-Risk level            : MEDIUM — 43.53/100
-Event direction       : VOLATILITY_ONLY
-Company type          : GENERIC
-Confidence / freshness: 87.06% / UNAVAILABLE
-Primary category      : EARNINGS
-Impact / decay        : ONE_TO_THREE_DAYS / EXPONENTIAL (1.00)
-Overnight gap risk    : 70/100
-Overnight hold        : BLOCKED
-Base readiness        : 82.81%
-Directional bonus     : +0.0
-Volatility penalty    : -8
-Gap-risk penalty      : -4.9
-Uncertainty penalty   : -0.0
-Adjusted readiness    : 69.91%
-Event position scale  : 75%
-Base / final position : 111 / 83 shares
-Strategy restriction  : NO_OVERNIGHT
-Final action          : WATCH_INTRADAY
-  ✓ Union Bank Q1 results: Net profit jumps 29% YoY, asset quality improves; shares surge 4% - Upstox (43.53/100)
-  ! Event context degraded: TypeError
-JULY history        : avg N/A%, median N/A%, wins N/A% (0 years; INSUFFICIENT)
-Current month MTD    : None% (UNAVAILABLE; score impact +0.00)
-Regime history       : UNAVAILABLE — N/A% win rate, 0 samples (INSUFFICIENT); score impact +0.00
-Option strategy      : rejected [OPTION_DATA_UNAVAILABLE]
-Option rejection     : No UNIONBANK option expiries in requested month 2026-08 within the configured DTE range
-  ✓ technical_score: 88/100 (minimum 55)
-  ✓ entry_confirmation: all confirmation checks passed
-  ✓ volume: relative volume 1.84x (minimum 0.75x)
-  ✓ market_alignment: UNCERTAIN
-  ✓ sector_support: NEUTRAL
-  ✓ risk_reward: 1:2.36 (minimum 1:1.5)
-  ✓ option_context: option evidence unavailable — neutral
-  – current_month_history: not enforced during calibration
-  – regime_history: not enforced during calibration
-Target diagnostic    : Nearest resistance is only 1.12 away versus ATR 5.76.
-Target diagnostic    : Credible breakout (70%) activates weighted targets beyond nearest resistance.
-Short Put eligibility : REJECTED [OPTION_DATA_UNAVAILABLE]
-Short Put rejection   : No UNIONBANK option expiries in requested month 2026-08 within the configured DTE range
-Reasons              : BREAKOUT setup passed every entry-confirmation check.; Trend: STRONG BULLISH.; RSI: 58.8.
-News                 : Union Bank Q1 results: Net profit jumps 29% YoY, asset quality improves; shares surge 4% - Upstox
-News                 : If EPS Growth Is Important To You, Union Bank of India (NSE:UNIONBANK) Presents An Opportunity - simplywall.st
-====================================================================
-WATCHLIST #2 — OIL
---------------------------------------------------------------------
-Setup / action       : WATCHLIST / WAIT FOR CONFIRMATION
-Market alignment     : UNCERTAIN
-Sector               : ENERGY
-Current price        : ₹453.70
-AI score             : 82.14/100
-Quality grade        : A — Excellent
-Quality score        : 86.75/100
-News sentiment       : NEUTRAL (-13.4)
-News collection      : FETCHED (8 articles)
-News sentiment state : ANALYZED
-News analysis        : LOCAL_FINBERT / ProsusAI/finbert
-News materiality     : LOW / impact NONE
-Model confidence     : 75%
-Estimated probability: 81.61%
-Trade eligibility    : WATCHLIST
-Strategy             : WATCH (3-5 trading days)
-Trend / momentum     : STRONG BULLISH / BULLISH
-Stock liquidity      : EXCELLENT (178.54 cr avg/day)
-F&O trust filter      : TRUSTED (95.0/100)
-Sector / relative str: BULLISH / VERY STRONG
-Support / resistance : ₹448.15 / ₹456.00
-Entry / stop         : ₹453.70 / ₹445.96
-Targets              : ₹456.00, ₹467.50, ₹484.66
-Target model         : SECOND_TARGET_BREAKOUT (90.0% breakout probability)
-Expected reward      : ₹13.80 (nearest target ₹2.30)
-Expected risk/reward : 1:1.78
-Expected value       : ₹9.84 (+1.271R)
-Execution readiness  : 78.38% — PREPARE (Prepare order)
-Execution policy     : CAUTIOUS — execute at 85.0%
-Position size        : 61 shares (max risk ₹500.00)
-Risk scaling         : 50% position; 0.5% effective risk
-Option account       : ₹2,500,000.00 capital; ₹100,000.00 max risk/trade
-Option execution     : UNAVAILABLE_OR_REJECTED
-Option context       : NEUTRAL — score adjustment only
-EVENT RISK
---------------------------------------------------------------------
-Risk level            : VERY_LOW — 0.0/100
-Event direction       : UNCERTAIN
-Company type          : UPSTREAM_PRODUCER
-Confidence / freshness: 0% / UNAVAILABLE
-Primary category      : NONE
-Impact / decay        : INTRADAY / EXPONENTIAL (1.00)
-Overnight gap risk    : 0/100
-Overnight hold        : ALLOWED
-Base readiness        : 83.38%
-Directional bonus     : +0.0
-Volatility penalty    : -0
-Gap-risk penalty      : -0.0
-Uncertainty penalty   : -5.0
-Adjusted readiness    : 78.38%
-Event position scale  : 100%
-Base / final position : 61 / 61 shares
-Strategy restriction  : NONE
-Final action          : PREPARE
-  ! Event context degraded: TypeError
-JULY history        : avg N/A%, median N/A%, wins N/A% (0 years; INSUFFICIENT)
-Current month MTD    : None% (UNAVAILABLE; score impact +0.00)
-Regime history       : UNAVAILABLE — N/A% win rate, 0 samples (INSUFFICIENT); score impact +0.00
-Option strategy      : rejected [OPTION_DATA_UNAVAILABLE]
-Option rejection     : No OIL option expiries in requested month 2026-08 within the configured DTE range
-  ✓ technical_score: 87/100 (minimum 55)
-  ✗ entry_confirmation: waiting for EMA20, bullish candle, volume above 1.2x and MACD confirmation
-  ✓ volume: relative volume 2.39x (minimum 0.75x)
-  ✓ market_alignment: UNCERTAIN
-  ✓ sector_support: BULLISH
-  ✗ risk_reward: 1:0.3 (minimum 1:1.5)
-  ✓ option_context: option evidence unavailable — neutral
-  – current_month_history: not enforced during calibration
-  – regime_history: not enforced during calibration
-Target diagnostic    : Nearest resistance is only 2.30 away versus ATR 10.32.
-Target diagnostic    : Strong breakout probability (90%) treats nearest resistance as a trigger and uses the second target.
-Short Put eligibility : REJECTED [OPTION_DATA_UNAVAILABLE]
-Short Put rejection   : No OIL option expiries in requested month 2026-08 within the configured DTE range
-Reasons              : WATCHLIST setup detected, but entry confirmation is incomplete.; Trend: STRONG BULLISH.; RSI: 73.1.
-News                 : Oil India Share Price - Upstox
-News                 : Vedanta Oil and Gas Ltd. Share Price Today - Vedanta Oil and Gas Ltd. Stock Price Live NSE/BSE - CNBC TV18
-====================================================================
-WATCHLIST #3 — JSWSTEEL
---------------------------------------------------------------------
-Setup / action       : WATCHLIST / WAIT FOR CONFIRMATION
+QUALITY
+Quality grade        : B — Good
+Quality score        : 79.22/100
+SETUP
+Setup                : WATCHLIST
+ENTRY CONFIRMATION
+Confirmation         : FAILED (75.0%)
+MARKET AND NEWS CONTEXT
 Market alignment     : UNCERTAIN
 Sector               : METAL
-Current price        : ₹1,255.50
-AI score             : 85.57/100
-Quality grade        : A — Excellent
-Quality score        : 87.75/100
+Current price        : ₹1,257.00
+AI score             : 75.45/100
 News sentiment       : NEUTRAL (+13.1)
 News collection      : FETCHED (8 articles)
 News sentiment state : ANALYZED
@@ -280,719 +90,460 @@ News analysis        : LOCAL_FINBERT / ProsusAI/finbert
 News materiality     : LOW / impact NONE
 Model confidence     : 75%
 Estimated probability: 87.86%
-Trade eligibility    : WATCHLIST
-Strategy             : WATCH (3-5 trading days)
+Strategy             : Bull Call Spread (3-5 trading days)
 Trend / momentum     : STRONG BULLISH / BULLISH
-Stock liquidity      : EXCELLENT (200.83 cr avg/day)
+Stock liquidity      : EXCELLENT (201.32 cr avg/day)
 F&O trust filter      : TRUSTED (95.0/100)
-Sector / relative str: BULLISH / VERY STRONG
+Sector context       : AVAILABLE / WEAK
+Relative strength    : AVAILABLE / VERY STRONG / 63.16
 Support / resistance : ₹1,252.50 / ₹1,259.00
-Entry / stop         : ₹1,255.50 / ₹1,236.69
-Targets              : ₹1,259.00, ₹1,284.70, ₹1,330.76
-Target model         : SECOND_TARGET_BREAKOUT (90.0% breakout probability)
-Expected reward      : ₹29.20 (nearest target ₹3.50)
-Expected risk/reward : 1:1.55
-Expected value       : ₹23.37 (+1.243R)
-Execution readiness  : 78.24% — PREPARE (Prepare order)
-Execution policy     : CAUTIOUS — execute at 85.0%
-Position size        : 24 shares (max risk ₹500.00)
-Risk scaling         : 50% position; 0.5% effective risk
-Option account       : ₹2,500,000.00 capital; ₹100,000.00 max risk/trade
-Option execution     : UNAVAILABLE_OR_REJECTED
-Option context       : NEUTRAL — score adjustment only
+Entry / stop         : ₹1,257.00 / ₹1,238.19
+Targets              : ₹1,259.00, ₹1,284.70, ₹1,332.26
+Target model         : BREAKOUT_WEIGHTED_TARGETS (70.0% breakout probability)
+Expected reward      : ₹24.36 (nearest target ₹2.00)
+Expected risk/reward : 1:1.29
+R:R rejection floor  : 1:1.0
+R:R execution minimum: 1:1.5
+Expected value       : ₹19.12 (+1.016R)
 EVENT RISK
 --------------------------------------------------------------------
 Risk level            : VERY_LOW — 0.0/100
 Event direction       : UNCERTAIN
 Company type          : INTEGRATED_STEEL
-Confidence / freshness: 0% / UNAVAILABLE
+Classification conf. : 0%
+Primary freshness     : UNAVAILABLE
+Source coverage       : PARTIAL
+Event data state      : PARTIAL
+Supporting freshness  : UNAVAILABLE
+Effective confidence  : 0%
+Stock/sector/market  : 0 / 0 / 0
 Primary category      : NONE
 Impact / decay        : INTRADAY / EXPONENTIAL (1.00)
 Overnight gap risk    : 0/100
 Overnight hold        : ALLOWED
-Base readiness        : 83.24%
+Base readiness        : 79.45%
 Directional bonus     : +0.0
-Volatility penalty    : -0
+Volatility penalty    : -0.0
 Gap-risk penalty      : -0.0
-Uncertainty penalty   : -5.0
-Adjusted readiness    : 78.24%
+Event-risk penalty    : -0.0
+Data uncertainty pen. : -2.0
+Adjusted readiness    : 77.45%
 Event position scale  : 100%
-Base / final position : 24 / 24 shares
+EXECUTION READINESS
+Execution readiness  : 77.45% — PREPARE (Prepare order)
+Execution policy     : CAUTIOUS — execute at 85.0%
+TRADE ELIGIBILITY
+Trade eligibility    : WATCHLIST
+OPTION STRUCTURE
+Structure validation : INVALID
+OPTION TRADE APPROVAL
+Option approval      : REJECTED
+POSITION
+Position size        : 0 shares (max risk ₹0.00)
+Planned if confirmed : 24 shares
+Risk scaling         : 50% position; 0.5% effective risk
+FINAL ACTION
+Final action          : WAIT_FOR_CONFIRMATION
+Base / final position : 24 / 0 shares
 Strategy restriction  : NONE
-Final action          : PREPARE
-  ! Event context degraded: TypeError
+  ! Aggregate event source data includes stale records; no stale primary or supporting match is displayed.
 JULY history        : avg N/A%, median N/A%, wins N/A% (0 years; INSUFFICIENT)
 Current month MTD    : None% (UNAVAILABLE; score impact +0.00)
 Regime history       : UNAVAILABLE — N/A% win rate, 0 samples (INSUFFICIENT); score impact +0.00
-Option strategy      : rejected [OPTION_DATA_UNAVAILABLE]
-Option rejection     : No JSWSTEEL option expiries in requested month 2026-08 within the configured DTE range
-  ✓ technical_score: 93/100 (minimum 55)
+Option strategy      : Bull Call Spread
+PCR / Max pain       : 0.7 / 1240.0
+IV / option confidence: N/A / 39%
+Option hedge target  : ₹1,297.80 (technical level)
+Option entry check   : REJECTED
+Option rejection     : STALE_QUOTES
+Option rejection     : ENTRY_CONFIRMATION_FAILED
+Option rejection     : FINAL_ACTION_INCOMPATIBLE
+  BUY 8100 × 1260.0 CE @ ₹17.58
+  SELL 8100 × 1300.0 CE @ ₹5.45
+Option max loss      : ₹8,187.75
+  ✓ technical_score: 93/100 (minimum 55.0)
   ✗ entry_confirmation: waiting for EMA20, bullish candle, volume above 1.2x and MACD confirmation
-  ✓ volume: relative volume 1.65x (minimum 0.75x)
+  ✓ volume: relative volume 1.68x (minimum 0.75x)
   ✓ market_alignment: UNCERTAIN
-  ✓ sector_support: BULLISH
-  ✗ risk_reward: 1:1.36 (minimum 1:1.5)
-  ✓ option_context: option evidence unavailable — neutral
+  ✗ sector_support: WEAK
+  ✗ risk_reward: 1:1.29 (minimum 1:1.5)
+  ✗ option_context: canonical option structure is INVALID
   – current_month_history: not enforced during calibration
   – regime_history: not enforced during calibration
-Target diagnostic    : Nearest resistance is only 3.50 away versus ATR 25.09.
-Target diagnostic    : Strong breakout probability (90%) treats nearest resistance as a trigger and uses the second target.
-Short Put eligibility : REJECTED [OPTION_DATA_UNAVAILABLE]
-Short Put rejection   : No JSWSTEEL option expiries in requested month 2026-08 within the configured DTE range
-Reasons              : WATCHLIST setup detected, but entry confirmation is incomplete.; Trend: STRONG BULLISH.; RSI: 58.4.
+Target diagnostic    : Nearest resistance is only 2.00 away versus ATR 25.09.
+Target diagnostic    : Credible breakout (70%) activates weighted targets beyond nearest resistance.
+Short Put eligibility : REJECTED [UNDERLYING_NOT_BULLISH]
+Short Put rejection   : Bullish setup and entry confirmation are insufficient for short-Put risk.
+Reasons              : WATCHLIST setup detected, but entry confirmation is incomplete.; Trend: STRONG BULLISH.; RSI: 58.8.
 News                 : JSW Steel Limited (NSE:JSWSTEEL) Passed Our Checks, And It's About To Pay A ₹7.10 Dividend - simplywall.st
 News                 : JSW Energy Sells JSW Steel Shares for Rs 3,150 Cr - Rediff MoneyWiz
 ====================================================================
-WATCHLIST #4 — PREMIERENE
+WATCHLIST #2 — GLENMARK
 --------------------------------------------------------------------
-Setup / action       : BREAKOUT / BUY
+QUALITY
+Quality grade        : C — Average
+Quality score        : 69.05/100
+SETUP
+Setup                : PULLBACK
+ENTRY CONFIRMATION
+Confirmation         : FAILED (50.0%)
+MARKET AND NEWS CONTEXT
+Market alignment     : UNCERTAIN
+Sector               : PHARMA
+Current price        : ₹2,239.50
+AI score             : 71.39/100
+News sentiment       : BULLISH (+20.6)
+News collection      : FETCHED (8 articles)
+News sentiment state : ANALYZED
+News analysis        : LOCAL_FINBERT / ProsusAI/finbert
+News materiality     : LOW / impact SUPPORTIVE
+Model confidence     : 75%
+Estimated probability: 83.21%
+Strategy             : Bull Call Spread (3-5 trading days)
+Trend / momentum     : STRONG BULLISH / BEARISH
+Stock liquidity      : EXCELLENT (130.07 cr avg/day)
+F&O trust filter      : TRUSTED (95.0/100)
+Sector context       : AVAILABLE / WEAK
+Relative strength    : AVAILABLE / VERY STRONG / 73.68
+Support / resistance : ₹2,226.30 / ₹2,252.50
+Entry / stop         : ₹2,239.50 / ₹2,198.01
+Targets              : ₹2,252.50, ₹2,293.90, ₹2,405.44
+Target model         : BREAKOUT_WEIGHTED_TARGETS (70.0% breakout probability)
+Expected reward      : ₹56.01 (nearest target ₹13.00)
+Expected risk/reward : 1:1.35
+R:R rejection floor  : 1:1.0
+R:R execution minimum: 1:1.5
+Expected value       : ₹39.64 (+0.955R)
+EVENT RISK
+--------------------------------------------------------------------
+Risk level            : VERY_LOW — 0.0/100
+Event direction       : UNCERTAIN
+Company type          : GENERIC
+Classification conf. : 0%
+Primary freshness     : UNAVAILABLE
+Source coverage       : PARTIAL
+Event data state      : PARTIAL
+Supporting freshness  : UNAVAILABLE
+Effective confidence  : 0%
+Stock/sector/market  : 0 / 0 / 0
+Primary category      : NONE
+Impact / decay        : INTRADAY / EXPONENTIAL (1.00)
+Overnight gap risk    : 0/100
+Overnight hold        : ALLOWED
+Base readiness        : 77.91%
+Directional bonus     : +0.0
+Volatility penalty    : -0.0
+Gap-risk penalty      : -0.0
+Event-risk penalty    : -0.0
+Data uncertainty pen. : -2.0
+Adjusted readiness    : 75.91%
+Event position scale  : 100%
+EXECUTION READINESS
+Execution readiness  : 75.91% — PREPARE (Prepare order)
+Execution policy     : CAUTIOUS — execute at 85.0%
+TRADE ELIGIBILITY
+Trade eligibility    : WATCHLIST
+OPTION STRUCTURE
+Structure validation : INVALID
+OPTION TRADE APPROVAL
+Option approval      : REJECTED
+POSITION
+Position size        : 0 shares (max risk ₹0.00)
+Planned if confirmed : 11 shares
+Risk scaling         : 50% position; 0.5% effective risk
+FINAL ACTION
+Final action          : WAIT_FOR_CONFIRMATION
+Base / final position : 11 / 0 shares
+Strategy restriction  : NONE
+  ! Aggregate event source data includes stale records; no stale primary or supporting match is displayed.
+JULY history        : avg N/A%, median N/A%, wins N/A% (0 years; INSUFFICIENT)
+Current month MTD    : None% (UNAVAILABLE; score impact +0.00)
+Regime history       : UNAVAILABLE — N/A% win rate, 0 samples (INSUFFICIENT); score impact +0.00
+Option strategy      : Bull Call Spread
+PCR / Max pain       : 0.54 / 2240.0
+IV / option confidence: N/A / 39%
+Option hedge target  : ₹2,252.50 (technical level)
+Option entry check   : REJECTED
+Option rejection     : STALE_QUOTES
+Option rejection     : ENTRY_CONFIRMATION_FAILED
+Option rejection     : FINAL_ACTION_INCOMPATIBLE
+  BUY 10875 × 2240.0 CE @ ₹39.50
+  SELL 10875 × 2260.0 CE @ ₹30.40
+Option max loss      : ₹3,412.50
+  ✓ technical_score: 84/100 (minimum 55.0)
+  ✗ entry_confirmation: waiting for EMA20, bullish candle, volume above 1.2x and MACD confirmation
+  ✓ volume: relative volume 1.57x (minimum 0.75x)
+  ✓ market_alignment: UNCERTAIN
+  ✗ sector_support: WEAK
+  ✗ risk_reward: 1:1.35 (minimum 1:1.5)
+  ✗ option_context: canonical option structure is INVALID
+  – current_month_history: not enforced during calibration
+  – regime_history: not enforced during calibration
+Target diagnostic    : Nearest resistance is only 13.00 away versus ATR 55.31.
+Target diagnostic    : Credible breakout (70%) activates weighted targets beyond nearest resistance.
+Short Put eligibility : REJECTED [UNDERLYING_NOT_BULLISH]
+Short Put rejection   : Bullish setup and entry confirmation are insufficient for short-Put risk.
+Reasons              : PULLBACK setup detected, but entry confirmation is incomplete.; Trend: STRONG BULLISH.; RSI: 55.0.
+News                 : Is Now The Time To Put Glenmark Pharmaceuticals (NSE:GLENMARK) On Your Watchlist? - simplywall.st
+News                 : Glenmark Pharma shares soar 2% on plans to launch potassium phosphates injection USP - Upstox
+====================================================================
+WATCHLIST #3 — PREMIERENE
+--------------------------------------------------------------------
+QUALITY
+Quality grade        : B+ — Very Good
+Quality score        : 80.25/100
+SETUP
+Setup                : BREAKOUT
+ENTRY CONFIRMATION
+Confirmation         : FAILED (80.0%)
+MARKET AND NEWS CONTEXT
 Market alignment     : UNCERTAIN
 Sector               : RENEWABLE_ENERGY
-Current price        : ₹1,081.90
-AI score             : 83.6/100
-Quality grade        : A — Excellent
-Quality score        : 86.0/100
+Current price        : ₹1,086.40
+AI score             : 81.53/100
 News sentiment       : NEUTRAL (-0.3)
 News collection      : FETCHED (8 articles)
 News sentiment state : ANALYZED
 News analysis        : LOCAL_FINBERT / ProsusAI/finbert
 News materiality     : LOW / impact NONE
-Model confidence     : 95%
-Estimated probability: 91.52%
-Trade eligibility    : WATCHLIST
-Strategy             : Swing Breakout (3-5 trading days)
+Model confidence     : 75%
+Estimated probability: 86.52%
+Strategy             : Bull Call Spread (3-5 trading days)
 Trend / momentum     : STRONG BULLISH / BULLISH
-Stock liquidity      : EXCELLENT (138.37 cr avg/day)
+Stock liquidity      : EXCELLENT (139.0 cr avg/day)
 F&O trust filter      : TRUSTED (95.0/100)
-Sector / relative str: UNAVAILABLE (ignored) / VERY STRONG
+Sector context       : UNAVAILABLE / UNAVAILABLE
+Relative strength    : AVAILABLE / VERY STRONG / 100.0
 Support / resistance : ₹1,066.40 / ₹1,087.50
-Entry / stop         : ₹1,081.90 / ₹1,056.56
-Targets              : ₹1,087.50, ₹1,117.00, ₹1,183.26
-Target model         : SECOND_TARGET_BREAKOUT (80.0% breakout probability)
-Expected reward      : ₹35.10 (nearest target ₹5.60)
-Expected risk/reward : 1:1.39
-Expected value       : ₹29.97 (+1.183R)
-Execution readiness  : 74.89% — PREPARE (Prepare order)
-Execution policy     : CAUTIOUS — execute at 85.0%
-Position size        : 18 shares (max risk ₹500.00)
-Risk scaling         : 50% position; 0.5% effective risk
-Option account       : ₹2,500,000.00 capital; ₹100,000.00 max risk/trade
-Option execution     : UNAVAILABLE_OR_REJECTED
-Option context       : NEUTRAL — score adjustment only
+Entry / stop         : ₹1,086.40 / ₹1,061.06
+Targets              : ₹1,087.50, ₹1,117.00, ₹1,187.76
+Target model         : BREAKOUT_WEIGHTED_TARGETS (70.0% breakout probability)
+Expected reward      : ₹30.00 (nearest target ₹1.10)
+Expected risk/reward : 1:1.18
+R:R rejection floor  : 1:1.0
+R:R execution minimum: 1:1.5
+Expected value       : ₹22.54 (+0.890R)
 EVENT RISK
 --------------------------------------------------------------------
 Risk level            : VERY_LOW — 0.0/100
 Event direction       : UNCERTAIN
 Company type          : GENERIC
-Confidence / freshness: 0% / UNAVAILABLE
+Classification conf. : 0%
+Primary freshness     : UNAVAILABLE
+Source coverage       : PARTIAL
+Event data state      : PARTIAL
+Supporting freshness  : UNAVAILABLE
+Effective confidence  : 0%
+Stock/sector/market  : 0 / 0 / 0
 Primary category      : NONE
 Impact / decay        : INTRADAY / EXPONENTIAL (1.00)
 Overnight gap risk    : 0/100
 Overnight hold        : ALLOWED
-Base readiness        : 79.89%
+Base readiness        : 76.62%
 Directional bonus     : +0.0
-Volatility penalty    : -0
+Volatility penalty    : -0.0
 Gap-risk penalty      : -0.0
-Uncertainty penalty   : -5.0
-Adjusted readiness    : 74.89%
+Event-risk penalty    : -0.0
+Data uncertainty pen. : -2.0
+Adjusted readiness    : 74.62%
 Event position scale  : 100%
-Base / final position : 18 / 18 shares
+EXECUTION READINESS
+Execution readiness  : 74.62% — PREPARE (Prepare order)
+Execution policy     : CAUTIOUS — execute at 85.0%
+TRADE ELIGIBILITY
+Trade eligibility    : WATCHLIST
+OPTION STRUCTURE
+Structure validation : INVALID
+OPTION TRADE APPROVAL
+Option approval      : REJECTED
+POSITION
+Position size        : 0 shares (max risk ₹0.00)
+Planned if confirmed : 18 shares
+Risk scaling         : 50% position; 0.5% effective risk
+FINAL ACTION
+Final action          : WAIT_FOR_CONFIRMATION
+Base / final position : 18 / 0 shares
 Strategy restriction  : NONE
-Final action          : PREPARE
-  ! Event context degraded: TypeError
+  ! Aggregate event source data includes stale records; no stale primary or supporting match is displayed.
 JULY history        : avg N/A%, median N/A%, wins N/A% (0 years; INSUFFICIENT)
 Current month MTD    : None% (UNAVAILABLE; score impact +0.00)
 Regime history       : UNAVAILABLE — N/A% win rate, 0 samples (INSUFFICIENT); score impact +0.00
-Option strategy      : rejected [OPTION_DATA_UNAVAILABLE]
-Option rejection     : No PREMIERENE option expiries in requested month 2026-08 within the configured DTE range
-  ✓ technical_score: 88/100 (minimum 55)
-  ✓ entry_confirmation: all confirmation checks passed
+Option strategy      : Bull Call Spread
+PCR / Max pain       : 0.7 / 1060.0
+IV / option confidence: N/A / 39%
+Option hedge target  : ₹1,122.70 (technical level)
+Option entry check   : REJECTED
+Option rejection     : STALE_QUOTES
+Option rejection     : ENTRY_CONFIRMATION_FAILED
+Option rejection     : READINESS_TOO_LOW
+Option rejection     : FINAL_ACTION_INCOMPATIBLE
+  BUY 9750 × 1090.0 CE @ ₹19.18
+  SELL 9750 × 1120.0 CE @ ₹9.20
+Option max loss      : ₹6,487.00
+  ✓ technical_score: 88/100 (minimum 55.0)
+  ✗ entry_confirmation: waiting for EMA20, bullish candle, volume above 1.2x and MACD confirmation
   ✓ volume: relative volume 1.97x (minimum 0.75x)
   ✓ market_alignment: UNCERTAIN
   ✓ sector_support: UNAVAILABLE
-  ✗ risk_reward: 1:1.39 (minimum 1:1.5)
-  ✓ option_context: option evidence unavailable — neutral
+  ✗ risk_reward: 1:1.21 (minimum 1:1.5)
+  ✗ option_context: canonical option structure is INVALID
   – current_month_history: not enforced during calibration
   – regime_history: not enforced during calibration
-Target diagnostic    : Nearest resistance is only 5.60 away versus ATR 33.79.
-Target diagnostic    : Strong breakout probability (80%) treats nearest resistance as a trigger and uses the second target.
-Short Put eligibility : REJECTED [OPTION_DATA_UNAVAILABLE]
-Short Put rejection   : No PREMIERENE option expiries in requested month 2026-08 within the configured DTE range
-Reasons              : BREAKOUT setup passed every entry-confirmation check.; Trend: STRONG BULLISH.; RSI: 58.6.
+Target diagnostic    : Nearest resistance is only 1.10 away versus ATR 33.79.
+Target diagnostic    : Credible breakout (70%) activates weighted targets beyond nearest resistance.
+Short Put eligibility : REJECTED [UNDERLYING_NOT_BULLISH]
+Short Put rejection   : Bullish setup and entry confirmation are insufficient for short-Put risk.
+Reasons              : BREAKOUT setup detected, but entry confirmation is incomplete.; Trend: STRONG BULLISH.; RSI: 60.1.
 News                 : Premier Energies Limited's (NSE:PREMIERENE) Business Is Trailing The Market But Its Shares Aren't - simplywall.st
 News                 : PREMIERENE Forecast — Price Target — Prediction for 2027 - TradingView
 ====================================================================
-WATCHLIST #5 — SBIN
+WATCHLIST #4 — FEDERALBNK
 --------------------------------------------------------------------
-Setup / action       : TREND FOLLOWING / WAIT FOR CONFIRMATION
+QUALITY
+Quality grade        : C+ — Above Average
+Quality score        : 70.38/100
+SETUP
+Setup                : TREND FOLLOWING
+ENTRY CONFIRMATION
+Confirmation         : PASSED (100.0%)
+MARKET AND NEWS CONTEXT
 Market alignment     : UNCERTAIN
 Sector               : BANKING
-Current price        : ₹1,060.60
-AI score             : 79.69/100
-Quality grade        : A — Excellent
-Quality score        : 87.0/100
-News sentiment       : BULLISH (+53.5)
-News collection      : FETCHED (8 articles)
-News sentiment state : ANALYZED
-News analysis        : LOCAL_FINBERT / ProsusAI/finbert
-News materiality     : MEDIUM / impact SUPPORTIVE
-Model confidence     : 75%
-Estimated probability: 90.11%
-Trade eligibility    : WATCHLIST
-Strategy             : WATCH (3-5 trading days)
-Trend / momentum     : STRONG BULLISH / STRONG BULLISH
-Stock liquidity      : EXCELLENT (1172.1 cr avg/day)
-F&O trust filter      : TRUSTED (95.0/100)
-Sector / relative str: NEUTRAL / STRONG
-Support / resistance : ₹1,060.00 / ₹1,065.50
-Entry / stop         : ₹1,060.60 / ₹1,045.67
-Targets              : ₹1,065.50, ₹1,077.80, ₹1,120.30
-Target model         : BREAKOUT_WEIGHTED_TARGETS (70.0% breakout probability)
-Expected reward      : ₹19.55 (nearest target ₹4.90)
-Expected risk/reward : 1:1.31
-Expected value       : ₹16.14 (+1.082R)
-Execution readiness  : 68.09% — WATCH_INTRADAY (Watch intraday)
-Execution policy     : CAUTIOUS — execute at 85.0%
-Position size        : 23 shares (max risk ₹375.00)
-Risk scaling         : 50% position; 0.375% effective risk
-Option account       : ₹2,500,000.00 capital; ₹100,000.00 max risk/trade
-Option execution     : UNAVAILABLE_OR_REJECTED
-Option context       : NEUTRAL — score adjustment only
-EVENT RISK
---------------------------------------------------------------------
-Risk level            : MEDIUM — 45.01/100
-Event direction       : VOLATILITY_ONLY
-Company type          : GENERIC
-Confidence / freshness: 90.01% / UNAVAILABLE
-Primary category      : EARNINGS
-Impact / decay        : ONE_TO_THREE_DAYS / EXPONENTIAL (1.00)
-Overnight gap risk    : 70/100
-Overnight hold        : BLOCKED
-Base readiness        : 80.99%
-Directional bonus     : +0.0
-Volatility penalty    : -8
-Gap-risk penalty      : -4.9
-Uncertainty penalty   : -0.0
-Adjusted readiness    : 68.09%
-Event position scale  : 75%
-Base / final position : 31 / 23 shares
-Strategy restriction  : NO_OVERNIGHT
-Final action          : WATCH_INTRADAY
-  ✓ State Bank of India (NSE:SBIN) jumps 4.2% this week, though earnings growth is still tracking behind five-year shareholder returns - simplywall.st (45.01/100)
-  ! Event context degraded: TypeError
-JULY history        : avg N/A%, median N/A%, wins N/A% (0 years; INSUFFICIENT)
-Current month MTD    : None% (UNAVAILABLE; score impact +0.00)
-Regime history       : UNAVAILABLE — N/A% win rate, 0 samples (INSUFFICIENT); score impact +0.00
-Option strategy      : rejected [OPTION_DATA_UNAVAILABLE]
-Option rejection     : No SBIN option expiries in requested month 2026-08 within the configured DTE range
-  ✓ technical_score: 90/100 (minimum 55)
-  ✗ entry_confirmation: waiting for EMA20, bullish candle, volume above 1.2x and MACD confirmation
-  ✓ volume: relative volume 1.49x (minimum 0.75x)
-  ✓ market_alignment: UNCERTAIN
-  ✓ sector_support: NEUTRAL
-  ✗ risk_reward: 1:1.15 (minimum 1:1.5)
-  ✓ option_context: option evidence unavailable — neutral
-  – current_month_history: not enforced during calibration
-  – regime_history: not enforced during calibration
-Target diagnostic    : Nearest resistance is only 4.90 away versus ATR 19.90.
-Target diagnostic    : Credible breakout (70%) activates weighted targets beyond nearest resistance.
-Short Put eligibility : REJECTED [OPTION_DATA_UNAVAILABLE]
-Short Put rejection   : No SBIN option expiries in requested month 2026-08 within the configured DTE range
-Reasons              : TREND FOLLOWING setup detected, but entry confirmation is incomplete.; Trend: STRONG BULLISH.; RSI: 61.5.
-News                 : State Bank of India (NSE:SBIN) jumps 4.2% this week, though earnings growth is still tracking behind five-year shareholder returns - simplywall.st
-News                 : State Bank of India Shares Hits New High (NSE: SBIN) - AskTraders
-====================================================================
-WATCHLIST #6 — LICHSGFIN
---------------------------------------------------------------------
-Setup / action       : WATCHLIST / BUY
-Market alignment     : UNCERTAIN
-Sector               : FINANCIAL_SERVICES
-Current price        : ₹551.55
-AI score             : 80.29/100
-Quality grade        : B+ — Very Good
-Quality score        : 83.75/100
-News sentiment       : NEUTRAL (+4.1)
+Current price        : ₹350.75
+AI score             : 66.76/100
+News sentiment       : NEUTRAL (+11.9)
 News collection      : FETCHED (8 articles)
 News sentiment state : ANALYZED
 News analysis        : LOCAL_FINBERT / ProsusAI/finbert
 News materiality     : LOW / impact NONE
 Model confidence     : 95%
-Estimated probability: 88.36%
-Trade eligibility    : WATCHLIST
-Strategy             : BUY (3-5 trading days)
+Estimated probability: 77.14%
+Strategy             : Bull Call Spread (3-5 trading days)
 Trend / momentum     : STRONG BULLISH / BULLISH
-Stock liquidity      : HIGH (84.73 cr avg/day)
-F&O trust filter      : TRUSTED (92.5/100)
-Sector / relative str: UNAVAILABLE (ignored) / STRONG
-Support / resistance : ₹550.25 / ₹552.75
-Entry / stop         : ₹551.55 / ₹542.83
-Targets              : ₹552.75, ₹563.00, ₹586.41
-Target model         : SECOND_TARGET_BREAKOUT (80.0% breakout probability)
-Expected reward      : ₹11.45 (nearest target ₹1.20)
-Expected risk/reward : 1:1.31
-Expected value       : ₹9.10 (+1.044R)
-Execution readiness  : 73.9% — PREPARE (Prepare order)
-Execution policy     : CAUTIOUS — execute at 85.0%
-Position size        : 53 shares (max risk ₹500.00)
-Risk scaling         : 50% position; 0.5% effective risk
-Option account       : ₹2,500,000.00 capital; ₹100,000.00 max risk/trade
-Option execution     : UNAVAILABLE_OR_REJECTED
-Option context       : NEUTRAL — score adjustment only
-EVENT RISK
---------------------------------------------------------------------
-Risk level            : VERY_LOW — 0.0/100
-Event direction       : UNCERTAIN
-Company type          : GENERIC
-Confidence / freshness: 0% / UNAVAILABLE
-Primary category      : NONE
-Impact / decay        : INTRADAY / EXPONENTIAL (1.00)
-Overnight gap risk    : 0/100
-Overnight hold        : ALLOWED
-Base readiness        : 78.9%
-Directional bonus     : +0.0
-Volatility penalty    : -0
-Gap-risk penalty      : -0.0
-Uncertainty penalty   : -5.0
-Adjusted readiness    : 73.9%
-Event position scale  : 100%
-Base / final position : 53 / 53 shares
-Strategy restriction  : NONE
-Final action          : PREPARE
-  ! Event context degraded: TypeError
-JULY history        : avg N/A%, median N/A%, wins N/A% (0 years; INSUFFICIENT)
-Current month MTD    : None% (UNAVAILABLE; score impact +0.00)
-Regime history       : UNAVAILABLE — N/A% win rate, 0 samples (INSUFFICIENT); score impact +0.00
-Option strategy      : rejected [OPTION_DATA_UNAVAILABLE]
-Option rejection     : No LICHSGFIN option expiries in requested month 2026-08 within the configured DTE range
-  ✓ technical_score: 87/100 (minimum 55)
-  ✓ entry_confirmation: all confirmation checks passed
-  ✓ volume: relative volume 1.53x (minimum 0.75x)
-  ✓ market_alignment: UNCERTAIN
-  ✓ sector_support: UNAVAILABLE
-  ✗ risk_reward: 1:1.31 (minimum 1:1.5)
-  ✓ option_context: option evidence unavailable — neutral
-  – current_month_history: not enforced during calibration
-  – regime_history: not enforced during calibration
-Target diagnostic    : Nearest resistance is only 1.20 away versus ATR 11.62.
-Target diagnostic    : Strong breakout probability (80%) treats nearest resistance as a trigger and uses the second target.
-Short Put eligibility : REJECTED [OPTION_DATA_UNAVAILABLE]
-Short Put rejection   : No LICHSGFIN option expiries in requested month 2026-08 within the configured DTE range
-Reasons              : WATCHLIST setup passed every entry-confirmation check.; Trend: STRONG BULLISH.; RSI: 40.8.
-News                 : ETFs Investing in LIC Housing Finance Ltd Stocks - TradingView
-News                 : Those who invested in LIC Housing Finance (NSE:LICHSGFIN) three years ago are up 44% - simplywall.st
-====================================================================
-WATCHLIST #7 — ULTRACEMCO
---------------------------------------------------------------------
-Setup / action       : WATCHLIST / WAIT FOR CONFIRMATION
-Market alignment     : UNCERTAIN
-Sector               : CEMENT
-Current price        : ₹11,900.00
-AI score             : 82.73/100
-Quality grade        : B+ — Very Good
-Quality score        : 80.75/100
-News sentiment       : NEUTRAL (-0.7)
-News collection      : FETCHED (8 articles)
-News sentiment state : ANALYZED
-News analysis        : LOCAL_FINBERT / ProsusAI/finbert
-News materiality     : LOW / impact NONE
-Model confidence     : 75%
-Estimated probability: 86.48%
-Trade eligibility    : WATCHLIST
-Strategy             : WATCH (3-5 trading days)
-Trend / momentum     : STRONG BULLISH / BULLISH
-Stock liquidity      : EXCELLENT (288.69 cr avg/day)
+Stock liquidity      : EXCELLENT (304.09 cr avg/day)
 F&O trust filter      : TRUSTED (95.0/100)
-Sector / relative str: UNAVAILABLE (ignored) / OUTPERFORM
-Support / resistance : ₹11,888.00 / ₹11,950.00
-Entry / stop         : ₹11,900.00 / ₹11,736.18
-Targets              : ₹11,950.00, ₹12,102.00, ₹12,555.29
-Target model         : SECOND_TARGET_BREAKOUT (80.0% breakout probability)
-Expected reward      : ₹202.00 (nearest target ₹50.00)
-Expected risk/reward : 1:1.23
-Expected value       : ₹152.54 (+0.931R)
-Execution readiness  : 66.61% — WATCH_INTRADAY (Watch intraday)
-Execution policy     : CAUTIOUS — execute at 85.0%
-Position size        : 1 shares (max risk ₹375.00)
-Risk scaling         : 50% position; 0.375% effective risk
-Option account       : ₹2,500,000.00 capital; ₹100,000.00 max risk/trade
-Option execution     : UNAVAILABLE_OR_REJECTED
-Option context       : NEUTRAL — score adjustment only
-EVENT RISK
---------------------------------------------------------------------
-Risk level            : MEDIUM — 46.83/100
-Event direction       : VOLATILITY_ONLY
-Company type          : CEMENT_PRODUCER
-Confidence / freshness: 93.65% / UNAVAILABLE
-Primary category      : EARNINGS
-Impact / decay        : ONE_TO_THREE_DAYS / EXPONENTIAL (1.00)
-Overnight gap risk    : 70/100
-Overnight hold        : BLOCKED
-Base readiness        : 79.51%
-Directional bonus     : +0.0
-Volatility penalty    : -8
-Gap-risk penalty      : -4.9
-Uncertainty penalty   : -0.0
-Adjusted readiness    : 66.61%
-Event position scale  : 75%
-Base / final position : 2 / 1 shares
-Strategy restriction  : NO_OVERNIGHT
-Final action          : WATCH_INTRADAY
-  ✓ Earnings Update: UltraTech Cement Limited (NSE:ULTRACEMCO) Just Reported Its Full-Year Results And Analysts Are Updating Their Forecasts - simplywall.st (46.83/100)
-  ! Event context degraded: TypeError
-JULY history        : avg N/A%, median N/A%, wins N/A% (0 years; INSUFFICIENT)
-Current month MTD    : None% (UNAVAILABLE; score impact +0.00)
-Regime history       : UNAVAILABLE — N/A% win rate, 0 samples (INSUFFICIENT); score impact +0.00
-Option strategy      : rejected [OPTION_DATA_UNAVAILABLE]
-Option rejection     : No ULTRACEMCO option expiries in requested month 2026-08 within the configured DTE range
-  ✓ technical_score: 93/100 (minimum 55)
-  ✗ entry_confirmation: waiting for EMA20, bullish candle, volume above 1.2x and MACD confirmation
-  ✓ volume: relative volume 1.87x (minimum 0.75x)
-  ✓ market_alignment: UNCERTAIN
-  ✓ sector_support: UNAVAILABLE
-  ✗ risk_reward: 1:1.23 (minimum 1:1.5)
-  ✓ option_context: option evidence unavailable — neutral
-  – current_month_history: not enforced during calibration
-  – regime_history: not enforced during calibration
-Target diagnostic    : Nearest resistance is only 50.00 away versus ATR 218.43.
-Target diagnostic    : Strong breakout probability (80%) treats nearest resistance as a trigger and uses the second target.
-Short Put eligibility : REJECTED [OPTION_DATA_UNAVAILABLE]
-Short Put rejection   : No ULTRACEMCO option expiries in requested month 2026-08 within the configured DTE range
-Reasons              : WATCHLIST setup detected, but entry confirmation is incomplete.; Trend: STRONG BULLISH.; RSI: 66.3.
-News                 : UltraTech Cem Share Price Today, UltraTech Cem Stock Price Live NSE/BSE Updates - The Economic Times
-News                 : Earnings Update: UltraTech Cement Limited (NSE:ULTRACEMCO) Just Reported Its Full-Year Results And Analysts Are Updating Their Forecasts - simplywall.st
-====================================================================
-WATCHLIST #8 — IEX
---------------------------------------------------------------------
-Setup / action       : WATCHLIST / BUY
-Market alignment     : UNCERTAIN
-Sector               : EXCHANGE
-Current price        : ₹125.11
-AI score             : 68.95/100
-Quality grade        : C — Average
-Quality score        : 69.5/100
-News sentiment       : NEUTRAL (+3.5)
-News collection      : FETCHED (8 articles)
-News sentiment state : ANALYZED
-News analysis        : LOCAL_FINBERT / ProsusAI/finbert
-News materiality     : LOW / impact NONE
-Model confidence     : 95%
-Estimated probability: 76.3%
-Trade eligibility    : WATCHLIST
-Strategy             : BUY (3-5 trading days)
-Trend / momentum     : NEUTRAL / BULLISH
-Stock liquidity      : HIGH (80.28 cr avg/day)
-F&O trust filter      : TRUSTED (92.5/100)
-Sector / relative str: UNAVAILABLE (ignored) / OUTPERFORM
-Support / resistance : ₹123.80 / ₹125.60
-Entry / stop         : ₹125.11 / ₹122.70
-Targets              : ₹125.60, ₹128.65, ₹134.75
-Target model         : SECOND_TARGET_BREAKOUT (80.0% breakout probability)
-Expected reward      : ₹3.54 (nearest target ₹0.49)
-Expected risk/reward : 1:1.47
-Expected value       : ₹2.13 (+0.884R)
-Execution readiness  : 54.78% — WAIT (Wait for confirmation)
-Execution policy     : CAUTIOUS — execute at 85.0%
-Position size        : 197 shares (max risk ₹500.00)
-Risk scaling         : 50% position; 0.5% effective risk
-Option account       : ₹2,500,000.00 capital; ₹100,000.00 max risk/trade
-Option execution     : UNAVAILABLE_OR_REJECTED
-Option context       : NEUTRAL — score adjustment only
-EVENT RISK
---------------------------------------------------------------------
-Risk level            : VERY_LOW — 0.0/100
-Event direction       : UNCERTAIN
-Company type          : GENERIC
-Confidence / freshness: 0% / UNAVAILABLE
-Primary category      : NONE
-Impact / decay        : INTRADAY / EXPONENTIAL (1.00)
-Overnight gap risk    : 0/100
-Overnight hold        : ALLOWED
-Base readiness        : 59.78%
-Directional bonus     : +0.0
-Volatility penalty    : -0
-Gap-risk penalty      : -0.0
-Uncertainty penalty   : -5.0
-Adjusted readiness    : 54.78%
-Event position scale  : 100%
-Base / final position : 197 / 197 shares
-Strategy restriction  : NONE
-Final action          : WAIT
-  ! Event context degraded: TypeError
-JULY history        : avg N/A%, median N/A%, wins N/A% (0 years; INSUFFICIENT)
-Current month MTD    : None% (UNAVAILABLE; score impact +0.00)
-Regime history       : UNAVAILABLE — N/A% win rate, 0 samples (INSUFFICIENT); score impact +0.00
-Option strategy      : rejected [OPTION_DATA_UNAVAILABLE]
-Option rejection     : No IEX option expiries in requested month 2026-08 within the configured DTE range
-  ✓ technical_score: 72/100 (minimum 55)
-  ✓ entry_confirmation: all confirmation checks passed
-  ✓ volume: relative volume 1.24x (minimum 0.75x)
-  ✓ market_alignment: UNCERTAIN
-  ✓ sector_support: UNAVAILABLE
-  ✗ risk_reward: 1:1.34 (minimum 1:1.5)
-  ✓ option_context: option evidence unavailable — neutral
-  – current_month_history: not enforced during calibration
-  – regime_history: not enforced during calibration
-Target diagnostic    : Nearest resistance is only 0.49 away versus ATR 3.21.
-Target diagnostic    : Strong breakout probability (80%) treats nearest resistance as a trigger and uses the second target.
-Short Put eligibility : REJECTED [OPTION_DATA_UNAVAILABLE]
-Short Put rejection   : No IEX option expiries in requested month 2026-08 within the configured DTE range
-Reasons              : WATCHLIST setup passed every entry-confirmation check.; Trend: NEUTRAL.; RSI: 50.0.
-News                 : IEX shares rise 1% as Q1FY27 electricity traded volume climbs - BusinessLine
-News                 : Indian Energy Exchange Limited (NSE:IEX) Looks Like A Good Stock, And It's Going Ex-Dividend Soon - simplywall.st
-====================================================================
-WATCHLIST #9 — GLENMARK
---------------------------------------------------------------------
-Setup / action       : PULLBACK / WAIT FOR CONFIRMATION
-Market alignment     : UNCERTAIN
-Sector               : PHARMA
-Current price        : ₹2,242.20
-AI score             : 83.7/100
-Quality grade        : C+ — Above Average
-Quality score        : 72.25/100
-News sentiment       : NEUTRAL (+0.0)
-News collection      : NOT_FETCHED (0 articles)
-News sentiment state : NOT_REQUESTED
-News analysis        : NOT_REQUESTED / N/A
-News materiality     : UNAVAILABLE / impact NONE
-Model confidence     : 75%
-Estimated probability: 82.95%
-Trade eligibility    : WATCHLIST
-Strategy             : WATCH (3-5 trading days)
-Trend / momentum     : STRONG BULLISH / BEARISH
-Stock liquidity      : EXCELLENT (130.22 cr avg/day)
-F&O trust filter      : TRUSTED (95.0/100)
-Sector / relative str: STRONG / VERY STRONG
-Support / resistance : ₹2,226.30 / ₹2,252.50
-Entry / stop         : ₹2,242.20 / ₹2,200.71
-Targets              : ₹2,252.50, ₹2,293.90, ₹2,408.14
-Target model         : SECOND_TARGET_BREAKOUT (90.0% breakout probability)
-Expected reward      : ₹51.70 (nearest target ₹10.30)
-Expected risk/reward : 1:1.25
-Expected value       : ₹35.81 (+0.863R)
-Execution readiness  : 73.16% — PREPARE (Prepare order)
-Execution policy     : CAUTIOUS — execute at 85.0%
-Position size        : 11 shares (max risk ₹500.00)
-Risk scaling         : 50% position; 0.5% effective risk
-Option account       : ₹2,500,000.00 capital; ₹100,000.00 max risk/trade
-Option execution     : UNAVAILABLE_OR_REJECTED
-Option context       : NEUTRAL — score adjustment only
-EVENT RISK
---------------------------------------------------------------------
-Risk level            : VERY_LOW — 0.0/100
-Event direction       : UNCERTAIN
-Company type          : GENERIC
-Confidence / freshness: 0% / UNAVAILABLE
-Primary category      : NONE
-Impact / decay        : INTRADAY / EXPONENTIAL (1.00)
-Overnight gap risk    : 0/100
-Overnight hold        : ALLOWED
-Base readiness        : 78.16%
-Directional bonus     : +0.0
-Volatility penalty    : -0
-Gap-risk penalty      : -0.0
-Uncertainty penalty   : -5.0
-Adjusted readiness    : 73.16%
-Event position scale  : 100%
-Base / final position : 11 / 11 shares
-Strategy restriction  : NONE
-Final action          : PREPARE
-  ! Event context degraded: TypeError
-JULY history        : avg N/A%, median N/A%, wins N/A% (0 years; INSUFFICIENT)
-Current month MTD    : None% (UNAVAILABLE; score impact +0.00)
-Regime history       : UNAVAILABLE — N/A% win rate, 0 samples (INSUFFICIENT); score impact +0.00
-Option strategy      : rejected [OPTION_DATA_UNAVAILABLE]
-Option rejection     : No GLENMARK option expiries in requested month 2026-08 within the configured DTE range
-  ✓ technical_score: 87/100 (minimum 55)
-  ✗ entry_confirmation: waiting for EMA20, bullish candle, volume above 1.2x and MACD confirmation
-  ✓ volume: relative volume 1.57x (minimum 0.75x)
-  ✓ market_alignment: UNCERTAIN
-  ✓ sector_support: STRONG
-  ✗ risk_reward: 1:1.3 (minimum 1:1.5)
-  ✓ option_context: option evidence unavailable — neutral
-  – current_month_history: not enforced during calibration
-  – regime_history: not enforced during calibration
-Target diagnostic    : Nearest resistance is only 10.30 away versus ATR 55.31.
-Target diagnostic    : Strong breakout probability (90%) treats nearest resistance as a trigger and uses the second target.
-Short Put eligibility : REJECTED [OPTION_DATA_UNAVAILABLE]
-Short Put rejection   : No GLENMARK option expiries in requested month 2026-08 within the configured DTE range
-Reasons              : PULLBACK setup detected, but entry confirmation is incomplete.; Trend: STRONG BULLISH.; RSI: 55.3.
-====================================================================
-WATCHLIST #10 — HINDPETRO
---------------------------------------------------------------------
-Setup / action       : WATCHLIST / BUY
-Market alignment     : UNCERTAIN
-Sector               : ENERGY
-Current price        : ₹404.60
-AI score             : 70.05/100
-Quality grade        : D — Weak
-Quality score        : 62.5/100
-News sentiment       : NEUTRAL (+0.0)
-News collection      : NOT_FETCHED (0 articles)
-News sentiment state : NOT_REQUESTED
-News analysis        : NOT_REQUESTED / N/A
-News materiality     : UNAVAILABLE / impact NONE
-Model confidence     : 95%
-Estimated probability: 77.75%
-Trade eligibility    : WATCHLIST
-Strategy             : BUY (3-5 trading days)
-Trend / momentum     : NEUTRAL / BULLISH
-Stock liquidity      : EXCELLENT (253.01 cr avg/day)
-F&O trust filter      : TRUSTED (95.0/100)
-Sector / relative str: BULLISH / INLINE
-Support / resistance : ₹402.70 / ₹405.80
-Entry / stop         : ₹404.60 / ₹397.04
-Targets              : ₹405.80, ₹412.55, ₹434.86
-Target model         : BREAKOUT_WEIGHTED_TARGETS (70.0% breakout probability)
-Expected reward      : ₹9.04 (nearest target ₹1.20)
-Expected risk/reward : 1:1.19
-Expected value       : ₹5.35 (+0.707R)
-Execution readiness  : 52.53% — WAIT (Wait for confirmation)
-Execution policy     : CAUTIOUS — execute at 85.0%
-Position size        : 62 shares (max risk ₹500.00)
-Risk scaling         : 50% position; 0.5% effective risk
-Option account       : ₹2,500,000.00 capital; ₹100,000.00 max risk/trade
-Option execution     : UNAVAILABLE_OR_REJECTED
-Option context       : NEUTRAL — score adjustment only
-EVENT RISK
---------------------------------------------------------------------
-Risk level            : VERY_LOW — 0.0/100
-Event direction       : UNCERTAIN
-Company type          : OIL_MARKETING_AND_REFINING
-Confidence / freshness: 0% / UNAVAILABLE
-Primary category      : NONE
-Impact / decay        : INTRADAY / EXPONENTIAL (1.00)
-Overnight gap risk    : 0/100
-Overnight hold        : ALLOWED
-Base readiness        : 57.53%
-Directional bonus     : +0.0
-Volatility penalty    : -0
-Gap-risk penalty      : -0.0
-Uncertainty penalty   : -5.0
-Adjusted readiness    : 52.53%
-Event position scale  : 100%
-Base / final position : 62 / 62 shares
-Strategy restriction  : NONE
-Final action          : WAIT
-  ! Event context degraded: TypeError
-JULY history        : avg N/A%, median N/A%, wins N/A% (0 years; INSUFFICIENT)
-Current month MTD    : None% (UNAVAILABLE; score impact +0.00)
-Regime history       : UNAVAILABLE — N/A% win rate, 0 samples (INSUFFICIENT); score impact +0.00
-Option strategy      : rejected [OPTION_DATA_UNAVAILABLE]
-Option rejection     : No HINDPETRO option expiries in requested month 2026-08 within the configured DTE range
-  ✓ technical_score: 75/100 (minimum 55)
-  ✓ entry_confirmation: all confirmation checks passed
-  ✓ volume: relative volume 1.38x (minimum 0.75x)
-  ✓ market_alignment: UNCERTAIN
-  ✓ sector_support: BULLISH
-  ✗ risk_reward: 1:1.05 (minimum 1:1.5)
-  ✓ option_context: option evidence unavailable — neutral
-  – current_month_history: not enforced during calibration
-  – regime_history: not enforced during calibration
-Target diagnostic    : Nearest resistance is only 1.20 away versus ATR 10.09.
-Target diagnostic    : Credible breakout (70%) activates weighted targets beyond nearest resistance.
-Short Put eligibility : REJECTED [OPTION_DATA_UNAVAILABLE]
-Short Put rejection   : No HINDPETRO option expiries in requested month 2026-08 within the configured DTE range
-Reasons              : WATCHLIST setup passed every entry-confirmation check.; Trend: NEUTRAL.; RSI: 57.0.
-====================================================================
-WATCHLIST #11 — FEDERALBNK
---------------------------------------------------------------------
-Setup / action       : TREND FOLLOWING / BUY
-Market alignment     : UNCERTAIN
-Sector               : BANKING
-Current price        : ₹351.50
-AI score             : 71.46/100
-Quality grade        : C+ — Above Average
-Quality score        : 72.75/100
-News sentiment       : NEUTRAL (+0.0)
-News collection      : NOT_FETCHED (0 articles)
-News sentiment state : NOT_REQUESTED
-News analysis        : NOT_REQUESTED / N/A
-News materiality     : UNAVAILABLE / impact NONE
-Model confidence     : 95%
-Estimated probability: 75.95%
-Trade eligibility    : WATCHLIST
-Strategy             : BUY (3-5 trading days)
-Trend / momentum     : STRONG BULLISH / BULLISH
-Stock liquidity      : EXCELLENT (304.61 cr avg/day)
-F&O trust filter      : TRUSTED (95.0/100)
-Sector / relative str: NEUTRAL / VERY STRONG
+Sector context       : AVAILABLE / WEAK
+Relative strength    : AVAILABLE / VERY STRONG / 84.21
 Support / resistance : ₹323.00 / N/A
-Entry / stop         : ₹351.50 / ₹323.00
-Targets              : ₹380.00, ₹408.50, ₹437.00
+Entry / stop         : ₹350.75 / ₹323.00
+Targets              : ₹378.50, ₹406.25, ₹434.00
 Target model         : NEAREST_RESISTANCE (70.0% breakout probability)
-Expected reward      : ₹28.50 (nearest target ₹28.50)
+Expected reward      : ₹27.75 (nearest target ₹27.75)
 Expected risk/reward : 1:1.0
-Expected value       : ₹14.79 (+0.519R)
-Execution readiness  : 66.58% — WATCH_INTRADAY (Watch intraday)
-Execution policy     : CAUTIOUS — execute at 85.0%
-Position size        : 17 shares (max risk ₹500.00)
-Risk scaling         : 50% position; 0.5% effective risk
-Option account       : ₹2,500,000.00 capital; ₹100,000.00 max risk/trade
-Option execution     : UNAVAILABLE_OR_REJECTED
-Option context       : NEUTRAL — score adjustment only
+R:R rejection floor  : 1:1.0
+R:R execution minimum: 1:1.5
+Expected value       : ₹15.06 (+0.543R)
 EVENT RISK
 --------------------------------------------------------------------
 Risk level            : VERY_LOW — 0.0/100
 Event direction       : UNCERTAIN
 Company type          : GENERIC
-Confidence / freshness: 0% / UNAVAILABLE
+Classification conf. : 0%
+Primary freshness     : UNAVAILABLE
+Source coverage       : PARTIAL
+Event data state      : PARTIAL
+Supporting freshness  : UNAVAILABLE
+Effective confidence  : 0%
+Stock/sector/market  : 0 / 0 / 0
 Primary category      : NONE
 Impact / decay        : INTRADAY / EXPONENTIAL (1.00)
 Overnight gap risk    : 0/100
 Overnight hold        : ALLOWED
-Base readiness        : 71.58%
+Base readiness        : 71.89%
 Directional bonus     : +0.0
-Volatility penalty    : -0
+Volatility penalty    : -0.0
 Gap-risk penalty      : -0.0
-Uncertainty penalty   : -5.0
-Adjusted readiness    : 66.58%
+Event-risk penalty    : -0.0
+Data uncertainty pen. : -2.0
+Adjusted readiness    : 69.89%
 Event position scale  : 100%
-Base / final position : 17 / 17 shares
+EXECUTION READINESS
+Execution readiness  : 69.89% — WATCH_INTRADAY (Watch intraday)
+Execution policy     : CAUTIOUS — execute at 85.0%
+TRADE ELIGIBILITY
+Trade eligibility    : WATCHLIST
+OPTION STRUCTURE
+Structure validation : INVALID
+OPTION TRADE APPROVAL
+Option approval      : REJECTED
+POSITION
+Position size        : 0 shares (max risk ₹0.00)
+Planned if confirmed : 17 shares
+Risk scaling         : 50% position; 0.5% effective risk
+FINAL ACTION
+Final action          : WAIT_FOR_CONFIRMATION
+Base / final position : 17 / 0 shares
 Strategy restriction  : NONE
-Final action          : WATCH_INTRADAY
-  ! Event context degraded: TypeError
+  ! Aggregate event source data includes stale records; no stale primary or supporting match is displayed.
 JULY history        : avg N/A%, median N/A%, wins N/A% (0 years; INSUFFICIENT)
 Current month MTD    : None% (UNAVAILABLE; score impact +0.00)
 Regime history       : UNAVAILABLE — N/A% win rate, 0 samples (INSUFFICIENT); score impact +0.00
-Option strategy      : rejected [OPTION_DATA_UNAVAILABLE]
-Option rejection     : No FEDERALBNK option expiries in requested month 2026-08 within the configured DTE range
-  ✓ technical_score: 72/100 (minimum 55)
+Option strategy      : Bull Call Spread
+PCR / Max pain       : 1.0 / 340.0
+IV / option confidence: N/A / 59%
+Option hedge target  : ₹378.50 (technical level)
+Option entry check   : REJECTED
+Option rejection     : STALE_QUOTES
+Option rejection     : READINESS_TOO_LOW
+Option rejection     : FINAL_ACTION_INCOMPATIBLE
+  BUY 22500 × 350.0 CE @ ₹6.25
+  SELL 22500 × 360.0 CE @ ₹2.17
+Option max loss      : ₹10,200.00
+  ✓ technical_score: 72/100 (minimum 55.0)
   ✓ entry_confirmation: all confirmation checks passed
-  ✓ volume: relative volume 1.20x (minimum 0.75x)
+  ✓ volume: relative volume 1.21x (minimum 0.75x)
   ✓ market_alignment: UNCERTAIN
-  ✓ sector_support: NEUTRAL
+  ✗ sector_support: WEAK
   ✗ risk_reward: 1:1.0 (minimum 1:1.5)
-  ✓ option_context: option evidence unavailable — neutral
+  ✗ option_context: canonical option structure is INVALID
   – current_month_history: not enforced during calibration
   – regime_history: not enforced during calibration
-Short Put eligibility : REJECTED [OPTION_DATA_UNAVAILABLE]
-Short Put rejection   : No FEDERALBNK option expiries in requested month 2026-08 within the configured DTE range
-Reasons              : TREND FOLLOWING setup passed every entry-confirmation check.; Trend: STRONG BULLISH.; RSI: 70.9.
+Short Put eligibility : REJECTED [INVALID_QUOTES]
+Short Put rejection   : Put quote is zero, crossed, or stale.
+Short Put rejection   : Bid/ask spread is too wide.
+Short Put rejection   : Executable bid premium is too low.
+Short Put strike scan : 3 contracts evaluated in 315.68–322.69 band; selected_contract=NONE
+Best rejected contract: 322.5 PE — INVALID_QUOTES, BID_ASK_SPREAD_TOO_WIDE, PREMIUM_TOO_LOW, DELTA_OUT_OF_RANGE
+SHORT PUT STRIKE EVALUATION
+----------------------------------------------------------------------------------------------------------------
+  Strike    Premium     Delta      ATR   Prob OTM            Model    Score  Result
+   317.5      ₹0.25    -0.034    4.04x      96.1%    BLACK_SCHOLES    50.0  REJECT: INVALID_QUOTES, BID_ASK_SPREAD_TOO_WIDE, PREMIUM_TOO_LOW, DELTA_OUT_OF_RANGE
+     320      ₹0.20    -0.032    3.74x      96.5%    BLACK_SCHOLES    50.0  REJECT: INVALID_QUOTES, BID_ASK_SPREAD_TOO_WIDE, PREMIUM_TOO_LOW, DELTA_OUT_OF_RANGE
+   322.5      ₹0.25    -0.041    3.43x      95.4%    BLACK_SCHOLES    50.0  REJECT: INVALID_QUOTES, BID_ASK_SPREAD_TOO_WIDE, PREMIUM_TOO_LOW, DELTA_OUT_OF_RANGE
+Reasons              : TREND FOLLOWING setup passed every entry-confirmation check.; Trend: STRONG BULLISH.; RSI: 70.5.
+News                 : Do Federal Bank's (NSE:FEDERALBNK) Earnings Warrant Your Attention? - simplywall.st
+News                 : Federal Bank Share Price - Live NSE: FEDERALBNK Stock Price & Chart - Upstox
 ====================================================================
 TODAY'S MARKET SUMMARY
 --------------------------------------------------------------------
 Stocks scanned       : 215
-Stocks shortlisted   : 11
+Stocks shortlisted   : 4
 Successfully analysed: 210
 Failed analysis      : 5
 Technical candidates : 146
 Liquidity-qualified  : 146
 Trust-qualified      : 146
 Context-reviewed     : 20
-Risk-valid           : 12
+Risk-valid           : 4
 Market-aligned       : 0
-Watchlist candidates : 11
+Watchlist candidates : 4
 Option-confirmed     : 0
 Conflicts rejected   : 0
 Trades generated     : 0
 Event-risk reviewed  : 20
-Event risk V/L/M/H/X : 17/0/3/0/0
+Event risk V/L/M/H/X : 20/0/0/0/0
 Event blocked        : 0
-Event size reduced   : 3
-Overnight blocked    : 3
-Event data unavailable: 20
-Common event category: EARNINGS
-Highest event risk   : ULTRACEMCO
+Event size reduced   : 0
+Overnight blocked    : 2
+  Event-level blocks : 0
+  Gap-risk blocks    : 2
+  Market-policy blocks: 0
+  Other blocks       : 0
+Event data C/P/U/F/N : 0/20/0/0/0
+Event data unavailable: 0
+Raw/candidate/background events: 1/1/1
+Common event category: MARKET_WIDE
+Highest event risk   : BAJFINANCE
 Short Put reviewed   : 20
 Short Put approved   : 0
 Cash-secured approved: 0
@@ -1001,34 +552,37 @@ Short Put rejected   : 20
 Avg probability OTM  : None%
 Avg OTM distance     : None%
 Avg short-Put ROR    : None%
-Common SP rejection  : OPTION_DATA_UNAVAILABLE
-Best sector          : PHARMA
+Common SP rejection  : UNDERLYING_NOT_BULLISH
+Best sector          : METAL
+Highest candidate sector: RENEWABLE_ENERGY
 Best option strategy : NOT AVAILABLE
 Average trade probability: N/A
-Average watchlist probability: 84.68%
+Average watchlist probability: 83.68%
 Market risk          : MODERATE
 Recommendation       : Wait for clearer market alignment.
 ====================================================================
 EXECUTION TIMINGS
 --------------------------------------------------------------------
-screening_seconds               : 8.771s
-market_and_relative_strength_seconds: 11.375s
-preliminary_review_seconds      : 0.067s
-targeted_news_seconds           : 15.41s
-news_model_load_seconds         : 32.238s
-news_model_preload_wait_seconds : 12.024s
-news_inference_seconds          : 13.425s
-news_network_seconds            : 3.211s
-final_review_seconds            : 0.047s
-total_seconds                   : 47.697s
-news_stocks_requested           : 8 stocks
-candidates_enriched             : 20 stocks
-event_context_fetch_seconds     : 0s
-event_sources_requested         : 0 stocks
-events_detected                 : 0s
-event_clusters_created          : 0s
-event_candidate_scoring_seconds : 0.022s
-event_total_seconds             : 0.022s
+screening_seconds               : 75.02s
+market_and_relative_strength_seconds: 8.852s
+preliminary_review_seconds      : 0.044s
+targeted_news_seconds           : 7.456s
+news_model_load_seconds         : 17.837s
+news_model_preload_wait_seconds : 0.0s
+news_inference_seconds          : 5.977s
+news_network_seconds            : 1.705s
+final_review_seconds            : 0.188s
+total_seconds                   : 91.565s
+news_stocks_requested           : 4 count
+candidates_enriched             : 20 count
+event_context_fetch_seconds     : 0.241s
+event_classification_seconds    : 0.0s
+event_sources_requested         : 4 count
+events_detected                 : 1 count
+event_clusters_created          : 1 count
+event_sources_available         : 1 count
+event_candidate_scoring_seconds : 0.016s
+event_total_seconds             : 0.257s
 ====================================================================
 FILTER FUNNEL
 --------------------------------------------------------------------
@@ -1039,28 +593,34 @@ liquidity           : 146 in / 146 passed / 0 rejected
 trust               : 146 in / 146 passed / 0 rejected
 ranking_shortlist   : 146 in / 20 passed / 0 rejected / 126 deferred
 context_review      : 20 in / 20 passed / 0 rejected
-risk                : 20 in / 12 passed / 8 rejected
+risk                : 20 in / 4 passed / 16 rejected
 event_risk          : 20 in / 20 passed / 0 rejected
 final_trade         : 20 in / 0 passed / 20 rejected
 ====================================================================
 CONTEXT REVIEW
 --------------------------------------------------------------------
-news                : 8 passed / 0 failed / 12 unavailable / 8 fetched / 0 analysis failed
-sector              : 10 passed / 0 failed / 10 unavailable
-relative_strength   : 20 passed / 0 failed / 0 unavailable
+news                : 4 passed / 0 failed / 16 unavailable / 4 fetched / 0 analysis failed / 16 policy-not-requested / 0 fetch-failed / 0 no-relevant-news
+sector              : 0 passed / 10 failed / 10 unavailable
+relative_strength   : 10 passed / 10 failed / 0 unavailable
 ====================================================================
 SECTOR RANKING
 --------------------------------------------------------------------
-#1 PHARMA: 86.22/100 (STRONG, 1 candidates)
-#2 METAL: 81.34/100 (BULLISH, 1 candidates)
-#3 ENERGY: 75.66/100 (BULLISH, 2 candidates)
-#4 RENEWABLE_ENERGY: 70.16/100 (UNAVAILABLE, 1 candidates)
-#5 CEMENT: 69.64/100 (UNAVAILABLE, 1 candidates)
-#6 FINANCIAL_SERVICES: 68.08/100 (UNAVAILABLE, 3 candidates)
-#7 CAPITAL_GOODS: 67.44/100 (UNAVAILABLE, 1 candidates)
-#8 BANKING: 67.16/100 (NEUTRAL, 6 candidates)
-#9 CONSUMER_DURABLES: 66.04/100 (UNAVAILABLE, 1 candidates)
-#10 DEFENCE: 65.61/100 (UNAVAILABLE, 2 candidates)
+#1 METAL: sector_market_score=30; candidate_aggregate_score=75.45/100; status=AVAILABLE; basis=SECTOR_MARKET_AND_CANDIDATES
+#2 PHARMA: sector_market_score=30; candidate_aggregate_score=71.39/100; status=AVAILABLE; basis=SECTOR_MARKET_AND_CANDIDATES
+#3 BANKING: sector_market_score=30; candidate_aggregate_score=67.56/100; status=AVAILABLE; basis=SECTOR_MARKET_AND_CANDIDATES
+#4 ENERGY: sector_market_score=30; candidate_aggregate_score=65.08/100; status=AVAILABLE; basis=SECTOR_MARKET_AND_CANDIDATES
+#5 RENEWABLE_ENERGY: sector_market_score=None; candidate_aggregate_score=81.53/100; status=UNAVAILABLE; basis=CANDIDATE_AGGREGATE_ONLY
+#6 CONSUMER_DURABLES: sector_market_score=None; candidate_aggregate_score=77.28/100; status=UNAVAILABLE; basis=CANDIDATE_AGGREGATE_ONLY
+#7 CAPITAL_GOODS: sector_market_score=None; candidate_aggregate_score=75.85/100; status=UNAVAILABLE; basis=CANDIDATE_AGGREGATE_ONLY
+#8 CEMENT: sector_market_score=None; candidate_aggregate_score=75.64/100; status=UNAVAILABLE; basis=CANDIDATE_AGGREGATE_ONLY
+#9 FINANCIAL_SERVICES: sector_market_score=None; candidate_aggregate_score=75.61/100; status=UNAVAILABLE; basis=CANDIDATE_AGGREGATE_ONLY
+#10 DEFENCE: sector_market_score=None; candidate_aggregate_score=71.76/100; status=UNAVAILABLE; basis=CANDIDATE_AGGREGATE_ONLY
+====================================================================
+DEPENDENCY HEALTH
+--------------------------------------------------------------------
+spaCy                : AVAILABLE
+Entity model         : en_core_web_sm (MISSING)
+Entity classification: DISABLED_SAFE
 ====================================================================
 HISTORICAL LEARNING
 --------------------------------------------------------------------
@@ -1071,14 +631,15 @@ Average MFE / MAE    : None% / None%
 ====================================================================
 REJECTED CANDIDATES
 --------------------------------------------------------------------
-SOLARINDS: Market-confidence-adjusted position size is below one share.
-BAJFINANCE: Risk/reward 0.87:1 is below the absolute 1.0 minimum.
-VOLTAS: Risk/reward 0.59:1 is below the absolute 1.0 minimum.; Nearest resistance is only 15.30 away versus ATR 34.61.; Target too close; breakout probability 60% is below the 65% requirement.
-SIEMENS: Risk/reward 0.56:1 is below the absolute 1.0 minimum.; Nearest resistance is only 42.50 away versus ATR 100.61.; Target too close; breakout probability 60% is below the 65% requirement.
-PNBHOUSING: Risk/reward 0.26:1 is below the absolute 1.0 minimum.; Nearest resistance is only 6.20 away versus ATR 32.02.; Target too close; breakout probability 60% is below the 65% requirement.
-PNB: Risk/reward 0.05:1 is below the absolute 1.0 minimum.; Nearest resistance is only 0.10 away versus ATR 2.54.; Target too close; breakout probability 50% is below the 65% requirement.
-HAL: Risk/reward 0.09:1 is below the absolute 1.0 minimum.; Nearest resistance is only 6.00 away versus ATR 83.37.; Target too close; breakout probability 60% is below the 65% requirement.
-INDIANB: Risk/reward 0.04:1 is below the absolute 1.0 minimum.; Nearest resistance is only 0.75 away versus ATR 28.01.; Target too close; breakout probability 60% is below the 65% requirement.
-BANKINDIA: Risk/reward 0.01:1 is below the absolute 1.0 minimum.; Nearest resistance is only 0.04 away versus ATR 4.74.; Target too close; breakout probability 50% is below the 65% requirement.
+BAJFINANCE: Risk/reward 0.73:1 is below the absolute 1.0 minimum.; Nearest resistance is only 24.00 away versus ATR 25.53.; Target too close; breakout probability 60% is below the 65% requirement.
+SIEMENS: Risk/reward 0.61:1 is below the absolute 1.0 minimum.; Nearest resistance is only 46.10 away versus ATR 100.61.; Target too close; breakout probability 50% is below the 65% requirement.
+SBIN: Risk/reward 0.37:1 is below the absolute 1.0 minimum.; Nearest resistance is only 5.50 away versus ATR 19.90.; Target too close; breakout probability 50% is below the 65% requirement.; Relative strength 42.11 is below the 65.0 minimum for a bullish trade in UNCERTAIN_BEARISH.
+UNIONBANK: Risk/reward 0.22:1 is below the absolute 1.0 minimum.; Nearest resistance is only 0.95 away versus ATR 5.76.; Target too close; breakout probability 50% is below the 65% requirement.; Relative strength 26.32 is below the 65.0 minimum for a bullish trade in UNCERTAIN_BEARISH.
+ULTRACEMCO: Risk/reward 0.29:1 is below the absolute 1.0 minimum.; Nearest resistance is only 47.00 away versus ATR 218.43.; Target too close; breakout probability 50% is below the 65% requirement.; Relative strength 21.05 is below the 65.0 minimum for a bullish trade in UNCERTAIN_BEARISH.
+PNB: Risk/reward 0.26:1 is below the absolute 1.0 minimum.; Nearest resistance is only 0.57 away versus ATR 2.54.; Target too close; breakout probability 50% is below the 65% requirement.; Relative strength 0.0 is below the 65.0 minimum for a bullish trade in UNCERTAIN_BEARISH.
+OIL: Risk/reward 0.32:1 is below the absolute 1.0 minimum.; Nearest resistance is only 2.45 away versus ATR 10.32.; Target too close; breakout probability 50% is below the 65% requirement.; Relative strength 47.37 is below the 65.0 minimum for a bullish trade in UNCERTAIN_BEARISH.
+PNBHOUSING: Risk/reward 0.27:1 is below the absolute 1.0 minimum.; Nearest resistance is only 6.60 away versus ATR 32.02.; Target too close; breakout probability 50% is below the 65% requirement.
+INDIANB: Risk/reward 0.21:1 is below the absolute 1.0 minimum.; Nearest resistance is only 4.40 away versus ATR 28.01.; Target too close; breakout probability 40% is below the 65% requirement.; Relative strength 36.84 is below the 65.0 minimum for a bullish trade in UNCERTAIN_BEARISH.
+IEX: Risk/reward 0.2:1 is below the absolute 1.0 minimum.; Nearest resistance is only 0.49 away versus ATR 3.21.; Target too close; breakout probability 50% is below the 65% requirement.; Relative strength 15.79 is below the 65.0 minimum for a bullish trade in UNCERTAIN_BEARISH.
 ====================================================================
 Research and paper-trading use only; no order has been placed.

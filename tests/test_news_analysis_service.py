@@ -57,7 +57,8 @@ class NewsAnalysisServiceTests(unittest.TestCase):
         result = NewsAnalysisService.analyze("SBIN", analyzer=analyzer)
 
         self.assertFalse(result["available"])
-        self.assertEqual(result["sentiment"], "NEUTRAL")
+        self.assertEqual(result["sentiment"], "UNAVAILABLE")
+        self.assertEqual(result["news_state"], "FETCH_FAILED")
         self.assertEqual(result["score"], 0)
         self.assertEqual(result["analysis_method"], "AI_UNAVAILABLE")
 

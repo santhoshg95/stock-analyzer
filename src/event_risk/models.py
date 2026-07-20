@@ -45,6 +45,9 @@ class EventDirection(StrEnum):
     MIXED = "MIXED"
     UNCERTAIN = "UNCERTAIN"
     VOLATILITY_ONLY = "VOLATILITY_ONLY"
+    POSITIVE_BUT_VOLATILE = "POSITIVE_BUT_VOLATILE"
+    NEGATIVE_AND_VOLATILE = "NEGATIVE_AND_VOLATILE"
+    NEUTRAL = "NEUTRAL"
 
 
 class EventStatus(StrEnum):
@@ -166,6 +169,20 @@ class EventRiskAssessment:
     gap_risk_penalty: float = 0.0
     uncertainty_penalty: float = 0.0
     manual_override_applied: bool = False
+    stock_specific_score: float = 0.0
+    sector_specific_score: float = 0.0
+    market_wide_score: float = 0.0
+    classification_confidence: float = 0.0
+    source_freshness: float = 0.0
+    effective_confidence: float = 0.0
+    freshness_state: str = "UNAVAILABLE"
+    market_wide_scaling: dict[str, Any] = field(default_factory=dict)
+    event_data_uncertainty_penalty: float = 0.0
+    primary_event_freshness_state: str = "UNAVAILABLE"
+    aggregate_source_coverage_state: str = "UNAVAILABLE"
+    supporting_sources_freshness_state: str = "UNAVAILABLE"
+    event_data_availability_state: str = "UNAVAILABLE"
+    overnight_block_cause: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

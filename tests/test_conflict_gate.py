@@ -25,7 +25,7 @@ class ConflictGateTests(unittest.TestCase):
         )
         self.assertTrue(result["approved"])
 
-    def test_option_entry_failure_does_not_reject_stock(self):
+    def test_legacy_option_entry_failure_is_ignored(self):
         result = DailyTradingAssistant._conflict_gate(
             {"action": "BUY"},
             {"available": False, "entry_validation": {"approved": False,
@@ -33,4 +33,4 @@ class ConflictGateTests(unittest.TestCase):
             {"sentiment": "NEUTRAL", "events": [], "headlines": []},
         )
         self.assertTrue(result["approved"])
-        self.assertIn("option margin or entry check failed", result["conflicts"])
+        self.assertNotIn("option margin or entry check failed", result["conflicts"])

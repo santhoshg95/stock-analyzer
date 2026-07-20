@@ -27,9 +27,9 @@ class DailyReportContractTests(unittest.TestCase):
             "headlines": [{"title": "Results"}], "analysis_method": "AI_UNAVAILABLE",
         })
         self.assertEqual(news["collection_state"], "FETCHED")
-        self.assertEqual(news["analysis_state"], "ANALYSIS_FAILED")
+        self.assertEqual(news["analysis_state"], "FETCH_FAILED")
         self.assertEqual(news["score_impact"], 0)
-        self.assertEqual(news["readiness_impact"], "NEUTRAL")
+        self.assertEqual(news["readiness_impact"], "UNKNOWN")
 
     @patch("src.workflow.daily_trading_assistant.OutcomeRepository")
     def test_cache_report_contains_actionable_trade_fields(self, outcome_repository):

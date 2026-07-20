@@ -12,6 +12,22 @@ class DailyReportPresenter:
     def _money(value: Any) -> str:
         return "N/A" if value is None else f"₹{float(value):,.2f}"
 
+    @staticmethod
+    def _timing_metric(name: str, value: Any) -> str:
+        count_metrics = {"news_stocks_requested", "candidates_enriched",
+                         "event_sources_requested", "event_sources_available",
+                         "events_detected", "event_clusters_created"}
+        if name in count_metrics:
+            return f"{name:<32}: {value} count"
+        if name.endswith("_seconds"):
+            return f"{name:<32}: {value}s"
+        return f"{name:<32}: {value}"
+
+    @staticmethod
+    def _option_approval_status(trade: dict[str, Any]) -> str:
+        """Read the sole canonical option-trade approval result."""
+        return str((trade.get("option_trade_approval") or {}).get("status", "UNAVAILABLE"))
+
     @classmethod
     def render(cls, report: dict[str, Any]) -> str:
         line = "=" * 68
@@ -25,13 +41,19 @@ class DailyReportPresenter:
             levels, risk = trade["levels"], trade["risk"]
             rows.extend([
                 f"{trade['status']} #{trade['rank']} — {trade['symbol']}", "-" * 68,
-                f"Setup / action       : {trade['setup']} / {trade['action']}",
+                "QUALITY",
+                f"Quality grade        : {trade.get('quality_grade', 'N/A')} — {trade.get('quality_label', 'Unrated')}",
+                f"Quality score        : {trade.get('quality_score', 0)}/100",
+                "SETUP",
+                f"Setup                : {trade['setup']}",
+                "ENTRY CONFIRMATION",
+                f"Confirmation         : {'PASSED' if trade.get('entry_confirmation', {}).get('passed') else 'FAILED'} "
+                f"({trade.get('entry_confirmation', {}).get('score', 0)}%)",
+                "MARKET AND NEWS CONTEXT",
                 f"Market alignment     : {trade['market_alignment']['status']}",
                 f"Sector               : {trade['sector']}",
                 f"Current price        : {cls._money(trade['current_price'])}",
                 f"AI score             : {trade['ai_score']}/100",
-                f"Quality grade        : {trade.get('quality_grade', 'N/A')} — {trade.get('quality_label', 'Unrated')}",
-                f"Quality score        : {trade.get('quality_score', 0)}/100",
                 f"News sentiment       : {trade['news']['sentiment']} ({trade['news']['score']:+.1f})",
                 f"News collection      : {trade['news'].get('collection_state', 'UNKNOWN')} ({trade['news'].get('article_count', 0)} articles)",
                 f"News sentiment state : {trade['news'].get('analysis_state', 'UNKNOWN')}",
@@ -39,28 +61,24 @@ class DailyReportPresenter:
                 f"News materiality     : {trade['news'].get('materiality', 'UNAVAILABLE')} / impact {trade['news'].get('trade_impact', 'NONE')}",
                 f"Model confidence     : {trade['model_confidence']['decision_confidence']}%",
                 f"Estimated probability: {trade['model_confidence']['estimated_probability']}%",
-                f"Trade eligibility    : {trade['trade_eligibility']['status']}",
                 f"Strategy             : {trade['strategy']} ({trade['time_frame']})",
                 f"Trend / momentum     : {trade['technical']['trend']} / {trade['technical']['momentum']}",
                 f"Stock liquidity      : {trade['stock_liquidity']['status']} ({trade['stock_liquidity']['average_daily_turnover_crore']} cr avg/day)",
                 f"F&O trust filter      : {trade['trust']['status']} ({trade['trust']['score']}/100)",
-                f"Sector / relative str: {trade['sector_context']['rating']}"
-                f"{' (ignored)' if not trade['sector_context'].get('available') else ''} / "
-                f"{trade['relative_strength']['rating']}",
+                f"Sector context       : {trade['sector_context'].get('status', 'UNAVAILABLE')} / "
+                f"{trade['sector_context']['rating']}",
+                f"Relative strength    : {trade['relative_strength'].get('status', 'UNAVAILABLE')} / "
+                f"{trade['relative_strength']['rating']} / "
+                f"{trade['relative_strength'].get('score', 'N/A')}",
                 f"Support / resistance : {cls._money(levels['support'])} / {cls._money(levels['resistance'])}",
                 f"Entry / stop         : {cls._money(levels['entry'])} / {cls._money(levels['stop_loss'])}",
                 f"Targets              : {cls._money(levels['target_1'])}, {cls._money(levels['target_2'])}, {cls._money(levels['target_3'])}",
                 f"Target model         : {levels.get('target_basis', 'NEAREST_RESISTANCE')} ({levels.get('breakout_probability', 0)}% breakout probability)",
                 f"Expected reward      : {cls._money(levels.get('expected_reward'))} (nearest target {cls._money(levels.get('nearest_target_reward'))})",
                 f"Expected risk/reward : 1:{levels['risk_reward']}",
+                f"R:R rejection floor  : 1:{trade.get('risk_reward_policy', {}).get('absolute_rejection_min_rr', 'N/A')}",
+                f"R:R execution minimum: 1:{trade.get('risk_reward_policy', {}).get('executable_trade_min_rr', 'N/A')}",
                 f"Expected value       : {cls._money(trade.get('expected_value', {}).get('amount'))} ({trade.get('expected_value', {}).get('risk_multiple', 0):+.3f}R)",
-                f"Execution readiness  : {trade['execution_readiness_score']}% — {trade['execution_status']} ({trade['execution_label']})",
-                f"Execution policy     : {trade['trade_readiness'].get('policy', 'N/A')} — execute at {trade['trade_readiness'].get('execute_threshold', 'N/A')}%",
-                f"Position size        : {risk['quantity']} shares (max risk {cls._money(risk['risk_amount'])})",
-                f"Risk scaling         : {trade['risk_policy']['position_scale'] * 100:.0f}% position; {trade['risk_policy']['effective_risk_percent']}% effective risk",
-                f"Option account       : {cls._money(trade['option_budget_policy']['capital_available'])} capital; {cls._money(trade['option_budget_policy']['risk_per_trade'])} max risk/trade",
-                f"Option execution     : {trade.get('option_context', {}).get('execution', 'UNAVAILABLE')}",
-                f"Option context       : {trade.get('option_directional_support', 'NEUTRAL')} — score adjustment only",
             ])
             event = trade.get("event_risk", {})
             rows.extend([
@@ -68,7 +86,13 @@ class DailyReportPresenter:
                 f"Risk level            : {event.get('event_risk_level', 'UNAVAILABLE')} — {event.get('event_risk_score', 0)}/100",
                 f"Event direction       : {event.get('event_direction', 'UNCERTAIN')}",
                 f"Company type          : {event.get('company_type', 'UNKNOWN')}",
-                f"Confidence / freshness: {event.get('event_confidence', 0)}% / {event.get('data_state', 'UNAVAILABLE')}",
+                f"Classification conf. : {event.get('classification_confidence', event.get('event_confidence', 0))}%",
+                f"Primary freshness     : {event.get('primary_event_freshness_state', 'UNAVAILABLE')}",
+                f"Source coverage       : {event.get('aggregate_source_coverage_state', 'UNAVAILABLE')}",
+                f"Event data state      : {event.get('event_data_availability_state', 'UNAVAILABLE')}",
+                f"Supporting freshness  : {event.get('supporting_sources_freshness_state', 'UNAVAILABLE')}",
+                f"Effective confidence  : {event.get('effective_confidence', 0)}%",
+                f"Stock/sector/market  : {event.get('stock_specific_score', 0)} / {event.get('sector_specific_score', 0)} / {event.get('market_wide_score', 0)}",
                 f"Primary category      : {event.get('primary_category', 'NONE')}",
                 f"Impact / decay        : {event.get('impact_duration', 'N/A')} / {event.get('decay_model', 'N/A')} ({event.get('current_decay_factor', 1):.2f})",
                 f"Overnight gap risk    : {event.get('gap_risk_score', 0)}/100",
@@ -77,12 +101,27 @@ class DailyReportPresenter:
                 f"Directional bonus     : +{event.get('directional_bonus', 0)}",
                 f"Volatility penalty    : -{event.get('volatility_penalty', 0)}",
                 f"Gap-risk penalty      : -{event.get('gap_risk_penalty', 0)}",
-                f"Uncertainty penalty   : -{event.get('uncertainty_penalty', 0)}",
+                f"Event-risk penalty    : -{event.get('readiness_penalty', 0)}",
+                f"Data uncertainty pen. : -{event.get('event_data_uncertainty_penalty', 0)}",
                 f"Adjusted readiness    : {event.get('adjusted_readiness', trade.get('execution_readiness_score', 0))}%",
                 f"Event position scale  : {event.get('position_size_multiplier', 1) * 100:.0f}%",
+                "EXECUTION READINESS",
+                f"Execution readiness  : {trade['execution_readiness_score']}% — {trade['execution_status']} ({trade['execution_label']})",
+                f"Execution policy     : {trade['trade_readiness'].get('policy', 'N/A')} — execute at {trade['trade_readiness'].get('execute_threshold', 'N/A')}%",
+                "TRADE ELIGIBILITY",
+                f"Trade eligibility    : {trade['trade_eligibility']['status']}",
+                "OPTION STRUCTURE",
+                f"Structure validation : {trade.get('option_structure', {}).get('status', 'UNAVAILABLE')}",
+                "OPTION TRADE APPROVAL",
+                f"Option approval      : {cls._option_approval_status(trade)}",
+                "POSITION",
+                f"Position size        : {risk['quantity']} shares (max risk {cls._money(risk['risk_amount'])})",
+                f"Planned if confirmed : {trade.get('planned_position_if_confirmed', {}).get('quantity', 0)} shares",
+                f"Risk scaling         : {trade['risk_policy']['position_scale'] * 100:.0f}% position; {trade['risk_policy']['effective_risk_percent']}% effective risk",
+                "FINAL ACTION",
+                f"Final action          : {trade['final_action']}",
                 f"Base / final position : {risk.get('base_market_adjusted_quantity', risk['quantity'])} / {risk['quantity']} shares",
                 f"Strategy restriction  : {', '.join(trade.get('strategy_restrictions', [])) or 'NONE'}",
-                f"Final action          : {trade.get('final_action', trade['action'])}",
             ])
             for matched in event.get("matched_events", [])[:4]:
                 rows.append(f"  ✓ {matched.get('title')} ({matched.get('candidate_event_score', 0)}/100)")
@@ -114,10 +153,9 @@ class DailyReportPresenter:
                 rows.append(f"PCR / Max pain       : {option.get('pcr', 'N/A')} / {option.get('max_pain', 'N/A')}")
                 rows.append(f"IV / option confidence: {option.get('iv_rank', 'N/A')} / {option.get('confidence', 'N/A')}%")
                 rows.append(f"Option hedge target  : {cls._money(plan.get('hedge_strike_target'))} (technical level)")
-                validation = option.get("entry_validation", {})
-                rows.append(f"Option entry check   : {'APPROVED' if validation.get('approved') else 'BLOCKED'}")
-                for warning in validation.get("warnings", []):
-                    rows.append(f"Option warning       : {warning}")
+                rows.append(f"Option entry check   : {cls._option_approval_status(trade)}")
+                for code in trade.get("option_trade_approval", {}).get("rejection_codes", []):
+                    rows.append(f"Option rejection     : {code}")
                 for leg in plan.get("legs", []):
                     rows.append(f"  {leg['side']} {leg['quantity']} × {leg['strike']} {leg['option_type']} @ {cls._money(leg['premium'])}")
                 rows.append(f"Option max loss      : {cls._money(plan.get('maximum_loss'))}")
@@ -180,8 +218,14 @@ class DailyReportPresenter:
                 rows.append(
                     f"Short Put strike scan : {strike_search['evaluated']} contracts evaluated "
                     f"in {strike_search['band']['lower']}–{strike_search['band']['upper']} band; "
-                    f"selected {strike_search['selected_strike']}"
+                    f"selected_contract={'NONE' if strike_search.get('selected_strike') is None else strike_search['selected_strike']}"
                 )
+                best_rejected = strike_search.get("best_rejected_candidate")
+                if best_rejected:
+                    rows.append(
+                        f"Best rejected contract: {best_rejected.get('strike')} PE — "
+                        f"{', '.join(best_rejected.get('rejection_codes', []))}"
+                    )
                 rows.extend([
                     "SHORT PUT STRIKE EVALUATION", "-" * 112,
                     f"{'Strike':>8} {'Premium':>10} {'Delta':>9} {'ATR':>8} {'Prob OTM':>10} {'Model':>16} {'Score':>8}  Result",
@@ -223,7 +267,13 @@ class DailyReportPresenter:
             f"Event blocked        : {summary.get('event_blocked_candidates', 0)}",
             f"Event size reduced   : {summary.get('event_reduced_positions', 0)}",
             f"Overnight blocked    : {summary.get('overnight_blocked_candidates', 0)}",
+            f"  Event-level blocks : {summary.get('overnight_event_level_blocks', 0)}",
+            f"  Gap-risk blocks    : {summary.get('overnight_gap_risk_blocks', 0)}",
+            f"  Market-policy blocks: {summary.get('overnight_market_policy_blocks', 0)}",
+            f"  Other blocks       : {summary.get('overnight_other_blocks', 0)}",
+            f"Event data C/P/U/F/N : {summary.get('event_data_complete', 0)}/{summary.get('event_data_partial', 0)}/{summary.get('event_data_unavailable', 0)}/{summary.get('event_data_failed', 0)}/{summary.get('event_data_not_requested', 0)}",
             f"Event data unavailable: {summary.get('event_data_unavailable', 0)}",
+            f"Raw/candidate/background events: {summary.get('raw_events_detected', 0)}/{summary.get('candidate_impacting_events', 0)}/{summary.get('background_market_wide_events', 0)}",
             f"Common event category: {summary.get('common_event_category', 'N/A')}",
             f"Highest event risk   : {summary.get('highest_risk_candidate', 'N/A')}",
             f"Short Put reviewed   : {summary.get('short_put_reviewed', 0)}",
@@ -236,13 +286,14 @@ class DailyReportPresenter:
             f"Avg short-Put ROR    : {summary.get('average_short_put_return_on_risk', 'N/A')}%",
             f"Common SP rejection  : {summary.get('most_common_short_put_rejection', 'N/A')}",
             f"Best sector          : {summary['best_sector']}",
+            f"Highest candidate sector: {summary.get('highest_ranked_candidate_sector', 'N/A')}",
             f"Best option strategy : {summary['best_option_strategy']}",
             f"Average trade probability: {summary['average_probability']}%" if summary.get("average_probability") is not None else "Average trade probability: N/A",
             f"Average watchlist probability: {summary['average_watchlist_probability']}%" if summary.get("average_watchlist_probability") is not None else "Average watchlist probability: N/A",
             f"Market risk          : {summary['market_risk']}",
             f"Recommendation       : {summary['recommendation']}", line,
             "EXECUTION TIMINGS", "-" * 68,
-            *[f"{name:<32}: {value}{' stocks' if name.endswith('_requested') or name == 'candidates_enriched' else 's'}"
+            *[cls._timing_metric(name, value)
               for name, value in report.get("timings", {}).items()],
             line,
             "FILTER FUNNEL", "-" * 68,
@@ -253,12 +304,24 @@ class DailyReportPresenter:
             "CONTEXT REVIEW", "-" * 68,
             *[f"{name:<20}: {values['passed']} passed / {values['failed']} failed / {values['unavailable']} unavailable"
               + (f" / {values['fetched']} fetched / {values['analysis_failed']} analysis failed"
+                 f" / {values.get('not_requested_by_policy', 0)} policy-not-requested"
+                 f" / {values.get('fetch_failed', 0)} fetch-failed"
+                 f" / {values.get('no_relevant_news', 0)} no-relevant-news"
                  if name == "news" else "")
               for name, values in report.get("context_statistics", {}).items()],
             line,
             "SECTOR RANKING", "-" * 68,
-            *[f"#{item['rank']} {item['sector']}: {item['score']}/100 ({item['rating']}, {item['candidate_count']} candidates)"
+            *[f"#{item['rank']} {item['sector']}: sector_market_score="
+              f"{item.get('sector_market_score', 'UNAVAILABLE')}; candidate_aggregate_score="
+              f"{item.get('candidate_aggregate_score', 'N/A')}/100; "
+              f"status={item.get('market_data_status', 'UNAVAILABLE')}; basis={item.get('ranking_basis')}"
               for item in report.get("sector_ranking", [])[:10]],
+            line,
+            "DEPENDENCY HEALTH", "-" * 68,
+            f"spaCy                : {report.get('dependency_health', {}).get('spacy', 'UNKNOWN')}",
+            f"Entity model         : {report.get('dependency_health', {}).get('entity_model', 'UNKNOWN')} "
+            f"({report.get('dependency_health', {}).get('entity_model_status', 'UNKNOWN')})",
+            f"Entity classification: {report.get('dependency_health', {}).get('entity_dependent_classification', 'UNKNOWN')}",
             line,
             "HISTORICAL LEARNING", "-" * 68,
             f"Completed outcomes   : {report.get('historical_learning', {}).get('completed_outcomes', 0)}",
