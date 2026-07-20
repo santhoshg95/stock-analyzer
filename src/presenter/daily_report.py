@@ -29,6 +29,7 @@ class DailyReportPresenter:
                 f"Sector               : {trade['sector']}",
                 f"Current price        : {cls._money(trade['current_price'])}",
                 f"AI score             : {trade['ai_score']}/100",
+                f"Confidence grade     : {trade.get('confidence_grade', {}).get('grade', 'N/A')} — {trade.get('confidence_grade', {}).get('label', 'Unrated')}",
                 f"News sentiment       : {trade['news']['sentiment']} ({trade['news']['score']:+.1f})",
                 f"News source          : {'AVAILABLE' if trade['news'].get('available') else 'UNAVAILABLE — neutral, no score impact'}",
                 f"News analysis        : {trade['news'].get('analysis_method', 'UNAVAILABLE')} / {trade['news'].get('model', 'N/A')}",
@@ -147,6 +148,20 @@ class DailyReportPresenter:
                     f"in {strike_search['band']['lower']}–{strike_search['band']['upper']} band; "
                     f"selected {strike_search['selected_strike']}"
                 )
+                rows.extend([
+                    "SHORT PUT STRIKE EVALUATION", "-" * 112,
+                    f"{'Strike':>8} {'Premium':>10} {'Delta':>9} {'ATR':>8} {'Prob OTM':>10} {'Model':>16} {'Score':>8}  Result",
+                ])
+                for item in sorted(strike_search.get("evaluations", []), key=lambda row: row["strike"]):
+                    delta = "N/A" if item.get("delta") is None else f"{item['delta']:.3f}"
+                    probability = "N/A" if item.get("probability_otm") is None else f"{item['probability_otm']:.1f}%"
+                    result = ("PASS" if item.get("result") == "PASS" else
+                              "REJECT: " + ", ".join(item.get("rejection_codes", [])))
+                    rows.append(
+                        f"{item['strike']:>8g} {cls._money(item.get('premium')):>10} {delta:>9} "
+                        f"{item.get('atr_coverage', 0):>7.2f}x {probability:>10} "
+                        f"{item.get('probability_source', 'N/A'):>16} {item.get('score', 0):>7.1f}  {result}"
+                    )
             rows.append("Reasons              : " + "; ".join(trade["ai_reasoning"][:3]))
             if trade["validation"]["conflicts"]:
                 rows.append("Conflicts            : " + "; ".join(trade["validation"]["conflicts"]))

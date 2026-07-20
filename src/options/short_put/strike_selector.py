@@ -33,10 +33,25 @@ class ShortPutStrikeSelector:
         lower, upper = cls.strike_band(
             spot, settings.short_put_min_otm_percent, settings.short_put_max_otm_percent
         )
+        # A narrow percentage band can fall between exchange strike intervals
+        # and misleadingly result in a one-contract "scan".  The band remains
+        # the target, but an under-populated band is supplemented with the two
+        # nearest listed strikes on either side so premium/delta trade-offs are
+        # actually evaluated before rejection.
+        eligible_by_expiry = {}
+        for chain, _ in valid_chains:
+            in_band = [put for put in chain.puts if lower <= put.strike <= upper]
+            if len(in_band) < 2:
+                below = sorted((put for put in chain.puts if put.strike < lower),
+                               key=lambda put: put.strike, reverse=True)[:2]
+                above = sorted((put for put in chain.puts if upper < put.strike < spot),
+                               key=lambda put: put.strike)[:2]
+                in_band = [*below, *in_band, *above]
+            eligible_by_expiry[chain.expiry] = {put.symbol for put in in_band}
         ranked = []
         for chain, dte in valid_chains:
             for put in chain.puts:
-                if lower <= put.strike <= upper:
+                if put.symbol in eligible_by_expiry[chain.expiry]:
                     target_delta = (
                         settings.short_put_target_delta_min
                         + settings.short_put_target_delta_max

@@ -22,7 +22,9 @@ class OptionStrategySelector:
 
         direction = (direction or "NEUTRAL").upper().replace("_", " ")
         if "BULLISH" in direction:
-            return "Bull Put Spread" if iv.status in ("HIGH", "VERY_HIGH") else "Bull Call Spread"
+            # Premium-selling is the primary bullish playbook.  Defined risk
+            # is preferred when IV is rich; otherwise reserve assignment cash.
+            return "Bull Put Spread" if iv.status in ("HIGH", "VERY_HIGH") else "Cash Secured Put"
         if "BEARISH" in direction:
             return "Bear Call Spread" if iv.status in ("HIGH", "VERY_HIGH") else "Bear Put Spread"
 

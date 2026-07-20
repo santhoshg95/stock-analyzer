@@ -21,7 +21,7 @@ class OptionDirectionTests(unittest.TestCase):
             strategy = selector.select(
                 pcr, SimpleNamespace(status=iv_status), greeks, direction="BULLISH"
             )
-            self.assertIn(strategy, {"Bull Call Spread", "Bull Put Spread"})
+            self.assertIn(strategy, {"Cash Secured Put", "Bull Put Spread"})
             self.assertNotIn("Bear", strategy)
 
     def test_strong_bullish_direction_is_normalized_by_selector(self):
@@ -32,7 +32,7 @@ class OptionDirectionTests(unittest.TestCase):
             SimpleNamespace(),
             direction="STRONG_BULLISH",
         )
-        self.assertEqual(strategy, "Bull Call Spread")
+        self.assertEqual(strategy, "Cash Secured Put")
 
 
 if __name__ == "__main__":

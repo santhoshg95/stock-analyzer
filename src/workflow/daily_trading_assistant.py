@@ -39,6 +39,21 @@ class DailyTradingAssistant:
         return "★" * filled + "☆" * (5 - filled)
 
     @staticmethod
+    def _confidence_grade(score: float, status: str) -> dict[str, str]:
+        if status == "REJECTED" or score < 50:
+            return {"grade": "F", "label": "Avoid"}
+        if status == "WATCHLIST":
+            return ({"grade": "C", "label": "Average"} if score >= 65
+                    else {"grade": "D", "label": "Weak"})
+        bands = ((90, "A+", "Excellent Trade"), (80, "A", "Very Good"),
+                 (70, "B", "Good"), (60, "C", "Average"),
+                 (50, "D", "Weak"))
+        for floor_score, grade, label in bands:
+            if score >= floor_score:
+                return {"grade": grade, "label": label}
+        return {"grade": "F", "label": "Avoid"}
+
+    @staticmethod
     def _option_rejection(option: dict[str, Any]) -> dict[str, Any]:
         """Normalize JSON null and absent rejection payloads to a dictionary."""
         return option.get("rejection") or {}
@@ -375,7 +390,12 @@ class DailyTradingAssistant:
                                      "confidence_adjusted_risk": scaled_option_risk,
                                      "stock_eligibility_independent": True},
             "probability": probability,
-            "strategy": "Swing Breakout" if analysis["breakout"]["confirmed"] else candidate["action"],
+            "strategy": (short_put.get("strategy") if short_put_approved
+                         else option.get("strategy") if option.get("available")
+                         else "Swing Breakout" if analysis["breakout"]["confirmed"]
+                         else candidate["action"]),
+            "strategy_priority": ["SHORT_PUT", "BULL_PUT_SPREAD", "CASH_SECURED_PUT", "BULL_CALL_SPREAD"],
+            "confidence_grade": self._confidence_grade(unified_score, status),
             "status": status,
             "setup": setup,
             "action": "WAIT FOR CONFIRMATION" if not entry_eligible else candidate["action"],
@@ -531,7 +551,11 @@ class DailyTradingAssistant:
                 "cash_secured_put_approved": sum(1 for plan in approved_short_puts if plan.get("strategy") == "CASH_SECURED_PUT"),
                 "bull_put_spread_approved": sum(1 for plan in approved_short_puts if plan.get("strategy") == "BULL_PUT_SPREAD"),
                 "short_put_rejected": len(short_put_plans) - len(approved_short_puts),
-                "average_probability_otm": round(sum(plan["candidate"]["probability_otm"] for plan in approved_short_puts) / len(approved_short_puts), 2) if approved_short_puts else None,
+                "average_probability_otm": (lambda values: round(sum(values) / len(values), 2) if values else None)([
+                    plan.get("candidate", {}).get("probability_otm")
+                    for plan in short_put_plans
+                    if plan.get("candidate", {}).get("probability_otm") is not None
+                ]),
                 "average_otm_distance": round(sum(plan["candidate"]["strike_distance_percent"] for plan in approved_short_puts) / len(approved_short_puts), 2) if approved_short_puts else None,
                 "average_short_put_return_on_risk": round(sum(plan["return_on_risk_percent"] for plan in approved_short_puts) / len(approved_short_puts), 2) if approved_short_puts else None,
                 "most_common_short_put_rejection": short_put_rejections.most_common(1)[0][0] if short_put_rejections else None,

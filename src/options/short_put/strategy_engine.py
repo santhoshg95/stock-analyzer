@@ -10,7 +10,7 @@ from src.options.short_put.models import (
     ShortPutRejectionCode, ShortPutStrategyPlan,
 )
 from src.options.short_put.strike_selector import ShortPutStrikeSelector
-from src.options.black_scholes import price_and_greeks
+from src.options.black_scholes import price_and_greeks, probability_expiring_otm
 from src.options.short_put.event_risk import ShortPutEventRiskEvaluator
 
 
@@ -46,6 +46,67 @@ class ShortPutStrategyEngine:
             )
             return bool(confirmed), "CONFIRMED_REVERSAL" if confirmed else category, None if confirmed else "REVERSAL_NOT_CONFIRMED"
         return False, category, "UNDERLYING_NOT_BULLISH"
+
+    @staticmethod
+    def _probability(put, spot: float, dte: int, atr: float):
+        effective_delta = put.delta
+        delta_source = put.greeks_source or ("BROKER_DELTA" if put.delta is not None else None)
+        if put.implied_volatility:
+            probability = probability_expiring_otm(
+                spot, put.strike, max(dte, 1) / 365, .07,
+                put.implied_volatility / 100, "PE",
+            )
+            if effective_delta is None:
+                greeks = price_and_greeks(spot, put.strike, max(dte, 1) / 365, .07,
+                                          put.implied_volatility / 100, "PE")
+                effective_delta = greeks["delta"] if greeks else None
+                delta_source = "BLACK_SCHOLES"
+            if probability is not None:
+                return effective_delta, probability, "BLACK_SCHOLES", "MEDIUM"
+        if effective_delta is not None:
+            return effective_delta, round((1 - abs(effective_delta)) * 100, 2), \
+                delta_source or "DELTA_PROXY", "MEDIUM"
+        if atr > 0:
+            z_score = (spot - put.strike) / (atr * sqrt(max(dte, 1)))
+            probability = round((.5 * (1 + erf(z_score / sqrt(2)))) * 100, 2)
+            return None, probability, "ATR_FALLBACK", "LOW"
+        return None, None, "UNAVAILABLE", "UNAVAILABLE"
+
+    @classmethod
+    def _strike_evaluation(cls, put, spot: float, dte: int, support: float | None,
+                           atr: float, settings) -> dict:
+        midpoint = (put.bid + put.ask) / 2 if put.bid > 0 and put.ask > 0 else 0
+        spread = ((put.ask - put.bid) / midpoint * 100) if midpoint > 0 else float("inf")
+        coverage = (spot - put.strike) / atr if atr > 0 else 0
+        delta, probability, source, quality = cls._probability(put, spot, dte, atr)
+        failures = []
+        checks = (
+            (put.bid > 0 and put.ask > 0 and put.ask >= put.bid and not put.quote_is_stale, "INVALID_QUOTES"),
+            (put.open_interest >= settings.short_put_min_open_interest, "OPEN_INTEREST_TOO_LOW"),
+            (put.volume >= settings.short_put_min_volume, "VOLUME_TOO_LOW"),
+            (spread <= settings.short_put_max_bid_ask_spread_percent, "BID_ASK_SPREAD_TOO_WIDE"),
+            (put.bid >= settings.short_put_min_premium, "PREMIUM_TOO_LOW"),
+            (coverage >= settings.short_put_min_atr_coverage, "ATR_COVERAGE_TOO_LOW"),
+            (not settings.short_put_require_strike_below_support or (support is not None and put.strike < support), "STRIKE_ABOVE_SUPPORT"),
+            (delta is not None, "GREEKS_UNAVAILABLE"),
+            (bool(put.implied_volatility), "IV_UNAVAILABLE"),
+            (probability is not None and probability >= settings.short_put_min_probability_otm, "PROBABILITY_TOO_LOW"),
+        )
+        failures.extend(code for passed, code in checks if not passed)
+        if delta is not None and not settings.short_put_target_delta_min <= abs(delta) <= settings.short_put_target_delta_max:
+            failures.append("DELTA_OUT_OF_RANGE")
+        score = max(0, 100 - len(failures) * 15)
+        if probability is not None:
+            score += min(10, max(0, probability - settings.short_put_min_probability_otm) / 2)
+        return {
+            "strike": put.strike, "expiry": put.expiry, "dte": dte,
+            "premium": put.bid, "delta": delta, "atr_coverage": round(coverage, 2),
+            "probability_otm": probability, "probability_source": source,
+            "probability_quality": quality, "spread_percent": round(spread, 2),
+            "open_interest": put.open_interest, "volume": put.volume,
+            "score": round(min(100, score), 2), "result": "PASS" if not failures else "REJECT",
+            "rejection_codes": failures,
+        }
 
     @classmethod
     def apply_context(cls, plan: dict, market_alignment: dict, sector: dict,
@@ -97,13 +158,32 @@ class ShortPutStrategyEngine:
         warnings = []
         if error:
             return asdict(cls._reject(symbol, setup, error, "No actual Put contract satisfies the configured expiry/OTM band.", warnings))
-        *_, chain, dte, sold = ranked_strikes[0]
+        evaluated_rows = [
+            (row, cls._strike_evaluation(row[-1], spot, row[-2], support, atr, settings))
+            for row in ranked_strikes
+        ]
+        # Select only after every scanned contract has a complete evaluation.
+        # Passing contracts always outrank rejected ones; if all fail, choose
+        # the closest-to-eligible contract so the final rejection is useful.
+        selected_row, _ = min(
+            evaluated_rows,
+            key=lambda pair: (
+                len(pair[1]["rejection_codes"]), -pair[1]["score"], *pair[0][:8]
+            ),
+        )
+        strike_evaluations = [evaluation for _, evaluation in evaluated_rows]
+        *_, chain, dte, sold = selected_row
         strike_search = {
             "evaluated": len(ranked_strikes),
             "band": {"lower": round(strike_band[0], 2), "upper": round(strike_band[1], 2)},
             "selected_strike": sold.strike,
             "selection_rule": "Fewest eligibility failures, then delta fit, probability, spread, OI, volume and executable premium.",
             "exhaustive_within_band": True,
+            "includes_adjacent_strikes": any(
+                item["strike"] < strike_band[0] or item["strike"] > strike_band[1]
+                for item in strike_evaluations
+            ),
+            "evaluations": strike_evaluations,
         }
         event_risk = ShortPutEventRiskEvaluator.evaluate(chain.expiry, news, corporate_events)
         if event_risk["confirmed_risk"] and settings.short_put_event_risk_block:
@@ -116,24 +196,9 @@ class ShortPutStrategyEngine:
         buffer = spot - sold.strike
         atr_coverage = buffer / atr if atr > 0 else 0
         below_support = (float(support) - sold.strike) if support is not None else None
-        effective_delta = sold.delta
-        delta_source = sold.greeks_source or ("BROKER_DELTA" if sold.delta is not None else None)
-        if effective_delta is None and sold.implied_volatility:
-            greeks = price_and_greeks(spot, sold.strike, max(dte, 1) / 365, .07,
-                                      sold.implied_volatility / 100, "PE")
-            effective_delta = greeks["delta"] if greeks else None
-            delta_source = "BLACK_SCHOLES"
-        if effective_delta is not None:
-            probability = round((1 - abs(effective_delta)) * 100, 2)
-            probability_source = delta_source or "MODEL_DELTA"
-            probability_quality = "HIGH" if delta_source == "BROKER_DELTA" else "MEDIUM"
-        elif atr > 0:
-            z_score = (spot - sold.strike) / (atr * sqrt(max(dte, 1)))
-            probability = round((.5 * (1 + erf(z_score / sqrt(2)))) * 100, 2)
-            probability_source = "ATR_FALLBACK"
-            probability_quality = "LOW"
-        else:
-            probability, probability_source, probability_quality = None, "UNAVAILABLE", "UNAVAILABLE"
+        effective_delta, probability, probability_source, probability_quality = cls._probability(
+            sold, spot, dte, atr
+        )
         candidate = ShortPutCandidate(
             symbol, spot, chain.expiry, dte, sold.strike, round(buffer, 2), round(buffer / spot * 100, 2),
             support, round(below_support, 2) if below_support is not None else None, atr, round(atr_coverage, 2),

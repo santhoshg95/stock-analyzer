@@ -64,6 +64,25 @@ class ShortPutStrategyTests(unittest.TestCase):
         self.assertNotIn("PREMIUM_TOO_LOW", [item["code"] for item in plan["evaluation"]["rejections"]])
         self.assertEqual(plan["strike_search"]["evaluated"], 2)
         self.assertTrue(plan["strike_search"]["exhaustive_within_band"])
+        self.assertEqual(len(plan["strike_search"]["evaluations"]), 2)
+        self.assertTrue(all("probability_source" in row for row in plan["strike_search"]["evaluations"]))
+
+    def test_sparse_band_adds_adjacent_listed_strikes(self):
+        chain = fixture_chain()
+        # Leave only 90 inside the 90-92 target band.
+        chain.puts = [contract(85), contract(87.5), contract(90), contract(95), contract(97.5)]
+        for put in chain.puts:
+            put.expiry = chain.expiry
+        plan = ShortPutStrategyEngine.evaluate("TEST", bullish_analysis(), [chain], self.settings)
+        strikes = {row["strike"] for row in plan["strike_search"]["evaluations"]}
+        self.assertEqual(strikes, {85, 87.5, 90, 95, 97.5})
+        self.assertTrue(plan["strike_search"]["includes_adjacent_strikes"])
+
+    def test_black_scholes_terminal_probability_is_reported_per_strike(self):
+        plan = ShortPutStrategyEngine.evaluate("TEST", bullish_analysis(), [fixture_chain()], self.settings)
+        evaluations = plan["strike_search"]["evaluations"]
+        self.assertTrue(all(row["probability_otm"] is not None for row in evaluations))
+        self.assertTrue(all(row["probability_source"] == "BLACK_SCHOLES" for row in evaluations))
 
     def test_bull_put_payoff_atr_support_and_lot_sizing(self):
         plan = ShortPutStrategyEngine.evaluate("TEST", bullish_analysis(), [fixture_chain()], self.settings)

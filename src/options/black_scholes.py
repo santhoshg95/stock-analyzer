@@ -35,6 +35,22 @@ def price_and_greeks(spot: float, strike: float, years: float, rate: float, vola
     return {"price": price, "delta": delta, "gamma": gamma, "theta": theta, "vega": vega, "rho": rho}
 
 
+def probability_expiring_otm(spot: float, strike: float, years: float, rate: float,
+                             volatility: float, option_type: str) -> float | None:
+    """Risk-neutral Black-Scholes probability that an option expires OTM.
+
+    This uses d2 (the terminal-price distribution), rather than the common
+    delta proxy based on d1.  Volatility is supplied as a decimal.
+    """
+    if min(spot, strike, years, volatility) <= 0:
+        return None
+    root_time = sqrt(years)
+    d1 = (log(spot / strike) + (rate + volatility * volatility / 2) * years) / (volatility * root_time)
+    d2 = d1 - volatility * root_time
+    probability = _normal_cdf(d2) if option_type == "PE" else _normal_cdf(-d2)
+    return round(probability * 100, 2)
+
+
 def implied_volatility(market_price: float, spot: float, strike: float, years: float, rate: float, option_type: str) -> float:
     if min(market_price, spot, strike, years) <= 0:
         return 0.0
