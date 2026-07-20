@@ -1,0 +1,254 @@
+[
+  {
+    "id": "BAJFINANCE-20260720043931781430",
+    "created_at": "2026-07-20T04:39:31.781447+00:00",
+    "symbol": "BAJFINANCE",
+    "strategy": "BUY ON DIP",
+    "ai_score": 82.0,
+    "estimated_probability": 79.45,
+    "outcome": null
+  },
+  {
+    "id": "HDFCBANK-20260720043931796567",
+    "created_at": "2026-07-20T04:39:31.796583+00:00",
+    "symbol": "HDFCBANK",
+    "strategy": "BUY ON DIP",
+    "ai_score": 67.0,
+    "estimated_probability": 67.45,
+    "outcome": null
+  },
+  {
+    "id": "SBIN-20260720043931810552",
+    "created_at": "2026-07-20T04:39:31.810568+00:00",
+    "symbol": "SBIN",
+    "strategy": "BUY ON DIP",
+    "ai_score": 63.0,
+    "estimated_probability": 62.05,
+    "outcome": null
+  },
+  {
+    "id": "UNOMINDA-20260720044742790124",
+    "created_at": "2026-07-20T04:47:42.790145+00:00",
+    "symbol": "UNOMINDA",
+    "strategy": "BUY ON DIP",
+    "ai_score": 84.94,
+    "estimated_probability": 77.07,
+    "outcome": null
+  },
+  {
+    "id": "SIEMENS-20260720044743555401",
+    "created_at": "2026-07-20T04:47:43.555430+00:00",
+    "symbol": "SIEMENS",
+    "strategy": "BUY ON DIP",
+    "ai_score": 86.94,
+    "estimated_probability": 77.07,
+    "outcome": null
+  },
+  {
+    "id": "INDIANB-20260720044744475894",
+    "created_at": "2026-07-20T04:47:44.475914+00:00",
+    "symbol": "INDIANB",
+    "strategy": "BUY ON DIP",
+    "ai_score": 77.0,
+    "estimated_probability": 72.25,
+    "outcome": null
+  },
+  {
+    "id": "GMRAIRPORT-20260720044745106321",
+    "created_at": "2026-07-20T04:47:45.106341+00:00",
+    "symbol": "GMRAIRPORT",
+    "strategy": "BUY ON DIP",
+    "ai_score": 77.0,
+    "estimated_probability": 71.05,
+    "outcome": null
+  },
+  {
+    "id": "UNITDSPR-20260720044745879467",
+    "created_at": "2026-07-20T04:47:45.879488+00:00",
+    "symbol": "UNITDSPR",
+    "strategy": "BUY ON DIP",
+    "ai_score": 74.94,
+    "estimated_probability": 68.07,
+    "outcome": null
+  },
+  {
+    "id": "GMRAIRPORT-20260720050236244089",
+    "created_at": "2026-07-20T05:02:36.244131+00:00",
+    "symbol": "GMRAIRPORT",
+    "strategy": "BUY ON DIP",
+    "ai_score": 77.0,
+    "estimated_probability": 71.05,
+    "outcome": null
+  },
+  {
+    "id": "LODHA-20260720050237281821",
+    "created_at": "2026-07-20T05:02:37.281846+00:00",
+    "symbol": "LODHA",
+    "strategy": "BUY ON DIP",
+    "ai_score": 74.0,
+    "estimated_probability": 66.25,
+    "outcome": null
+  },
+  {
+    "id": "MANKIND-20260720050238098382",
+    "created_at": "2026-07-20T05:02:38.098402+00:00",
+    "symbol": "MANKIND",
+    "strategy": "BUY ON DIP",
+    "ai_score": 73.0,
+    "estimated_probability": 68.65,
+    "outcome": null
+  },
+  {
+    "id": "GAIL-20260720050238948177",
+    "created_at": "2026-07-20T05:02:38.948202+00:00",
+    "symbol": "GAIL",
+    "strategy": "BUY ON DIP",
+    "ai_score": 74.41,
+    "estimated_probability": 69.59,
+    "outcome": null
+  },
+  {
+    "id": "LICI-20260720050239639406",
+    "created_at": "2026-07-20T05:02:39.639427+00:00",
+    "symbol": "LICI",
+    "strategy": "BUY ON DIP",
+    "ai_score": 73.47,
+    "estimated_probability": 68.96,
+    "outcome": null
+  },
+  {
+    "id": "SHREECEM-20260720051445196000",
+    "created_at": "2026-07-20T05:14:45.196023+00:00",
+    "symbol": "SHREECEM",
+    "strategy": "BUY ON DIP",
+    "ai_score": 82.5,
+    "estimated_probability": 76.45,
+    "outcome": null
+  },
+  {
+    "id": "UNITDSPR-20260720051445882508",
+    "created_at": "2026-07-20T05:14:45.882528+00:00",
+    "symbol": "UNITDSPR",
+    "strategy": "BUY ON DIP",
+    "ai_score": 74.94,
+    "estimated_probability": 68.07,
+    "outcome": null
+  },
+  {
+    "id": "TVSMOTOR-20260720051446710948",
+    "created_at": "2026-07-20T05:14:46.710969+00:00",
+    "symbol": "TVSMOTOR",
+    "strategy": "BUY ON DIP",
+    "ai_score": 74.41,
+    "estimated_probability": 71.39,
+    "outcome": null
+  },
+  {
+    "id": "LODHA-20260720051447461031",
+    "created_at": "2026-07-20T05:14:47.461055+00:00",
+    "symbol": "LODHA",
+    "strategy": "BUY ON DIP",
+    "ai_score": 74.0,
+    "estimated_probability": 66.25,
+    "outcome": null
+  },
+  {
+    "id": "MANKIND-20260720051448270735",
+    "created_at": "2026-07-20T05:14:48.270755+00:00",
+    "symbol": "MANKIND",
+    "strategy": "BUY ON DIP",
+    "ai_score": 73.0,
+    "estimated_probability": 68.65,
+    "outcome": null
+  },
+  {
+    "id": "COLPAL-20260720055006615853",
+    "created_at": "2026-07-20T05:50:06.615880+00:00",
+    "symbol": "COLPAL",
+    "strategy": "BUY ON DIP",
+    "ai_score": 87.0,
+    "estimated_probability": 78.85,
+    "outcome": null
+  },
+  {
+    "id": "SIEMENS-20260720055007451611",
+    "created_at": "2026-07-20T05:50:07.451640+00:00",
+    "symbol": "SIEMENS",
+    "strategy": "BUY ON DIP",
+    "ai_score": 82.94,
+    "estimated_probability": 75.28,
+    "outcome": null
+  },
+  {
+    "id": "GMRAIRPORT-20260720055008641746",
+    "created_at": "2026-07-20T05:50:08.641766+00:00",
+    "symbol": "GMRAIRPORT",
+    "strategy": "BUY ON DIP",
+    "ai_score": 76.0,
+    "estimated_probability": 71.05,
+    "outcome": null
+  },
+  {
+    "id": "LUPIN-20260720055009541130",
+    "created_at": "2026-07-20T05:50:09.541152+00:00",
+    "symbol": "LUPIN",
+    "strategy": "BUY ON DIP",
+    "ai_score": 75.47,
+    "estimated_probability": 70.76,
+    "outcome": null
+  },
+  {
+    "id": "NESTLEIND-20260720055010393412",
+    "created_at": "2026-07-20T05:50:10.393438+00:00",
+    "symbol": "NESTLEIND",
+    "strategy": "BUY ON DIP",
+    "ai_score": 77.97,
+    "estimated_probability": 70.76,
+    "outcome": null
+  },
+  {
+    "id": "IDFCFIRSTB-20260720060045579988",
+    "created_at": "2026-07-20T06:00:45.580018+00:00",
+    "symbol": "IDFCFIRSTB",
+    "strategy": "BUY ON DIP",
+    "ai_score": 66.97,
+    "estimated_probability": 68.96,
+    "outcome": null
+  },
+  {
+    "id": "BLUESTARCO-20260720060049960376",
+    "created_at": "2026-07-20T06:00:49.960406+00:00",
+    "symbol": "BLUESTARCO",
+    "strategy": "BUY ON DIP",
+    "ai_score": 67.44,
+    "estimated_probability": 68.07,
+    "outcome": null
+  },
+  {
+    "id": "IDFCFIRSTB-20260720061708309652",
+    "created_at": "2026-07-20T06:17:08.309672+00:00",
+    "symbol": "IDFCFIRSTB",
+    "strategy": "BUY ON DIP",
+    "ai_score": 66.97,
+    "estimated_probability": 68.96,
+    "outcome": null
+  },
+  {
+    "id": "360ONE-20260720061708723528",
+    "created_at": "2026-07-20T06:17:08.723549+00:00",
+    "symbol": "360ONE",
+    "strategy": "BUY ON DIP",
+    "ai_score": 67.5,
+    "estimated_probability": 65.05,
+    "outcome": null
+  },
+  {
+    "id": "BLUESTARCO-20260720061711963396",
+    "created_at": "2026-07-20T06:17:11.963424+00:00",
+    "symbol": "BLUESTARCO",
+    "strategy": "BUY ON DIP",
+    "ai_score": 67.44,
+    "estimated_probability": 68.07,
+    "outcome": null
+  }
+]

@@ -44,3 +44,6 @@ class OptionContract:
     vega: float | None = None
 
     rho: float | None = None
+
+    # Exchange lot size, supplied by the live instrument master when available.
+    lot_size: int = 1

@@ -16,6 +16,8 @@ class TradePlan:
 
     target2: float
 
+    target3: float
+
     risk: float
 
     reward: float

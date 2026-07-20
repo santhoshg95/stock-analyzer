@@ -30,8 +30,11 @@ from src.indicators.pipeline import IndicatorPipeline
 from src.position_sizing.position_size import PositionSizingEngine
 from src.options.engine.option_engine import OptionEngine
 from src.options.kite_option_chain import KiteOptionChainProvider
+from src.options.trade_builder import OptionTradeBuilder
 from src.trade_plan.trade_plan import TradePlanEngine
 from src.trading_engine.engine import TradingEngine
+from src.workflow.daily_trading_assistant import DailyTradingAssistant
+from src.learning.outcome_repository import OutcomeRepository
 
 
 class TradingPlatform:
@@ -74,6 +77,53 @@ class TradingPlatform:
             return value.isoformat()
         return value
 
+    @staticmethod
+    def _stock_liquidity(analysis: dict[str, Any]) -> dict[str, Any]:
+        """Score cash-market liquidity using average daily traded value.
+
+        Relative volume describes today's participation; average traded value
+        determines whether a stock is normally practical to enter and exit.
+        """
+        average_turnover = analysis["current_price"] * analysis["average_volume"]
+        turnover_crore = average_turnover / 10_000_000
+        if turnover_crore >= 100:
+            base, status = 100, "EXCELLENT"
+        elif turnover_crore >= 50:
+            base, status = 85, "HIGH"
+        elif turnover_crore >= 20:
+            base, status = 70, "GOOD"
+        elif turnover_crore >= 5:
+            base, status = 50, "MODERATE"
+        else:
+            base, status = 25, "LOW"
+        rvol = analysis["relative_volume"]
+        participation = 10 if rvol >= 1 else 0 if rvol >= .75 else -10
+        return {
+            "score": max(0, min(100, base + participation)),
+            "status": status,
+            "average_daily_turnover_crore": round(turnover_crore, 2),
+            "relative_volume": round(rvol, 2),
+        }
+
+    @staticmethod
+    def _trust_score(analysis: dict[str, Any], liquidity: dict[str, Any], quality: dict[str, Any]) -> dict[str, Any]:
+        """Conservative F&O suitability score; it is not a manipulation claim."""
+        atr_percent = (analysis["atr"] / analysis["current_price"]) * 100
+        score = liquidity["score"] * .50
+        score += 20 if quality["history_days"] >= 200 else 5
+        score += 15 if atr_percent <= 5 else 5 if atr_percent <= 8 else 0
+        score += 10 if quality["large_return_days"] <= 2 and quality["large_gap_days"] <= 2 else 0
+        score = round(min(100, score), 2)
+        flags = []
+        if quality["large_return_days"] > 2:
+            flags.append("frequent extreme daily moves")
+        if quality["large_gap_days"] > 2:
+            flags.append("frequent large gaps")
+        if atr_percent > 8:
+            flags.append("very high ATR volatility")
+        return {"score": score, "status": "TRUSTED" if score >= 70 else "CAUTION" if score >= 55 else "EXCLUDE",
+                "atr_percent": round(atr_percent, 2), "flags": flags}
+
     def analyze(self, symbol: str) -> dict[str, Any]:
         symbol = self._symbol(symbol)
         try:
@@ -103,6 +153,7 @@ class TradingPlatform:
             "entry": report["entry"],
             "breakout": report["breakout"],
             "candlestick": report["candlestick"],
+            "market_quality": report["market_quality"],
             "decision": report["decision"],
             "trade_plan": trade_plan,
             "position_size": position_size,
@@ -171,6 +222,14 @@ class TradingPlatform:
             decision = report["decision"]
             if analysis["score"] < minimum_score or decision["action"] not in {"BUY", "BUY ON DIP", "WATCH"}:
                 return None
+            liquidity = self._stock_liquidity(analysis)
+            # Avoid names that are hard to enter/exit even if their chart score
+            # is attractive. The threshold is deliberately modest for F&O names.
+            if liquidity["score"] < 40:
+                return None
+            trust = self._trust_score(analysis, liquidity, report["market_quality"])
+            if trust["score"] < 55:
+                return None
             return {
                 "symbol": symbol,
                 "action": decision["action"],
@@ -178,6 +237,8 @@ class TradingPlatform:
                 "technical_score": analysis["score"],
                 "recommendation": analysis["recommendation"],
                 "current_price": analysis["current_price"],
+                "stock_liquidity": liquidity,
+                "trust": trust,
                 "risk_reward": report["trade_plan"]["risk_reward"],
                 "candlestick": report["candlestick"],
                 "reason": decision["reason"],
@@ -206,6 +267,7 @@ class TradingPlatform:
             key=lambda item: (
                 action_rank[item["action"]],
                 item["technical_score"],
+                item["stock_liquidity"]["score"],
                 item["risk_reward"],
             ),
             reverse=True,
@@ -246,10 +308,18 @@ class TradingPlatform:
                 candidate["symbol"], candidate["current_price"]
             )
             analysis = OptionEngine().analyze(chain)
-            contracts = chain.calls if candidate["action"] in {"BUY", "BUY ON DIP"} else chain.puts
-            selected = min(contracts, key=lambda item: abs(item.strike - chain.spot_price)) if contracts else None
+            direction = "BULLISH" if candidate["action"] in {"BUY", "BUY ON DIP"} else "BEARISH"
+            trade = OptionTradeBuilder.build(
+                chain,
+                analysis.suggested_strategy or "Wait",
+                direction,
+                support=candidate["trade_plan"]["stop_loss"],
+                resistance=candidate["trade_plan"]["target1"],
+                risk_budget=candidate["position_size"]["risk_amount"],
+            )
             return self._serialize({
-                "available": True,
+                "available": trade["available"],
+                "reason": trade.get("reason"),
                 "expiry": chain.expiry,
                 "strategy": analysis.suggested_strategy,
                 "confidence": analysis.confidence,
@@ -257,8 +327,8 @@ class TradingPlatform:
                 "max_pain": analysis.max_pain,
                 "strongest_support": analysis.strongest_support,
                 "strongest_resistance": analysis.strongest_resistance,
-                "selected_contract": selected,
                 "reasons": analysis.reasons,
+                "trade": trade,
             })
         except (TokenException, RequestException, ValueError) as exc:
             return {"available": False, "reason": str(exc), "reasons": []}
@@ -281,3 +351,27 @@ class TradingPlatform:
 
     def portfolio(self) -> dict[str, Any]:
         return self._serialize(self.paper_broker.portfolio())
+
+    def daily_report(self, limit: int = 15, minimum_score: int = 40) -> dict[str, Any]:
+        """Generate the final ranked daily trade report.
+
+        This is a research/paper-trading recommendation only.  It never sends
+        live orders, even when Kite is the configured data source.
+        """
+        if not isinstance(limit, int) or not 1 <= limit <= 15:
+            raise ValidationError("limit must be an integer between 1 and 15")
+        if not isinstance(minimum_score, int) or not 0 <= minimum_score <= 100:
+            raise ValidationError("minimum_score must be an integer between 0 and 100")
+        return self._serialize(DailyTradingAssistant(self).generate(limit, minimum_score))
+
+    def record_trade_outcome(self, recommendation_id: str, won: bool, return_percent: float | None = None) -> dict[str, Any]:
+        if not isinstance(recommendation_id, str) or not recommendation_id:
+            raise ValidationError("recommendation_id is required")
+        if not isinstance(won, bool):
+            raise ValidationError("won must be true or false")
+        if return_percent is not None and not isinstance(return_percent, (int, float)):
+            raise ValidationError("return_percent must be numeric")
+        saved = OutcomeRepository().record_outcome(recommendation_id, won, return_percent)
+        if not saved:
+            raise ValidationError("recommendation_id was not found")
+        return {"recommendation_id": recommendation_id, "recorded": True}

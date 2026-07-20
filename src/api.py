@@ -22,6 +22,12 @@ class PaperTradeRequest(SymbolRequest):
     quantity: int | None = Field(default=None, gt=0)
 
 
+class OutcomeRequest(BaseModel):
+    recommendation_id: str = Field(min_length=1)
+    won: bool
+    return_percent: float | None = None
+
+
 def _call(operation):
     try:
         return operation()
@@ -44,6 +50,11 @@ def suggestions(limit: int = 5, minimum_score: int = 40):
     return _call(lambda: platform.suggest_stocks(limit, minimum_score))
 
 
+@app.get("/daily-report")
+def daily_report(limit: int = 15, minimum_score: int = 40):
+    return _call(lambda: platform.daily_report(limit, minimum_score))
+
+
 @app.post("/backtest")
 def backtest(request: SymbolRequest):
     return _call(lambda: platform.backtest(request.symbol))
@@ -57,3 +68,8 @@ def paper_trade(request: PaperTradeRequest):
 @app.get("/portfolio")
 def portfolio():
     return platform.portfolio()
+
+
+@app.post("/outcomes")
+def record_outcome(request: OutcomeRequest):
+    return _call(lambda: platform.record_trade_outcome(request.recommendation_id, request.won, request.return_percent))

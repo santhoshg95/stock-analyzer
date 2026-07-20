@@ -41,6 +41,8 @@ class TradePlanEngine:
 
                 target2=0.0,
 
+                target3=0.0,
+
                 risk=0.0,
 
                 reward=0.0,
@@ -61,6 +63,8 @@ class TradePlanEngine:
 
         target2 = resistance + reward
 
+        target3 = resistance + (reward * 2)
+
         # ----------------------------------------------------
 
         return TradePlan(
@@ -72,6 +76,8 @@ class TradePlanEngine:
             target1=round(target1, 2),
 
             target2=round(target2, 2),
+
+            target3=round(target3, 2),
 
             risk=round(risk, 2),
 

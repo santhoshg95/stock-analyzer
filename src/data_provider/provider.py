@@ -32,8 +32,6 @@ class DataProvider:
 
         if csv_file.exists():
 
-            print(f"Loading cached data : {symbol}")
-
             df = pd.read_csv(
                 csv_file,
                 header=[0, 1],
@@ -50,8 +48,6 @@ class DataProvider:
         # ---------------------------------------------
         # Download
         # ---------------------------------------------
-
-        print(f"No cache found : {symbol}")
 
         df = self.downloader.download_stock(symbol)
 

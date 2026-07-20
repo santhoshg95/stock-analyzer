@@ -17,6 +17,7 @@ KITE_ACCESS_TOKEN=your_daily_access_token
 ```bash
 .venv/bin/python main.py analyze RELIANCE
 .venv/bin/python main.py suggest --limit 5
+.venv/bin/python main.py daily-report --limit 15
 .venv/bin/python main.py backtest RELIANCE
 .venv/bin/python main.py papertrade RELIANCE BUY --quantity 10
 .venv/bin/python main.py portfolio
@@ -59,8 +60,8 @@ Install the dependencies, then start the API:
 .venv/bin/uvicorn src.api:app --reload
 ```
 
-Available endpoints are `GET /health`, `GET /suggestions`, `POST /analyze`, `POST /backtest`,
-`POST /papertrade`, and `GET /portfolio`. Request bodies for the first two are
+Available endpoints are `GET /health`, `GET /suggestions`, `GET /daily-report`, `POST /analyze`, `POST /backtest`,
+`POST /papertrade`, `POST /outcomes`, and `GET /portfolio`. Request bodies for the first two are
 `{"symbol": "RELIANCE"}`; paper trading also accepts `side` and optional
 `quantity`.
 
@@ -73,3 +74,26 @@ each request.
 
 This project is for research and paper trading. It does not constitute
 investment advice.
+
+## Daily recommendation report
+
+`daily-report` is the end-to-end output: it scans the configured universe,
+ranks up to 15 actionable candidates, generates entry/stop/target/position
+size details, enriches finalists with live option-chain intelligence when Kite
+is enabled, and prints a market summary. Add `--json` for the equivalent
+machine-readable report. It never submits live orders.
+
+For live Kite reports, news is collected only for the shortlisted stocks. Its
+headline sentiment and detected high-risk events adjust the unified AI score
+and estimated probability, and appear in the report with their source
+headlines. Cache mode intentionally does not fetch external news.
+
+The reported probability is a documented heuristic until it has been
+calibrated with recorded out-of-sample trade outcomes; it is not a promise of
+performance.
+
+Each daily recommendation receives a `recommendation_id`. After closing the
+paper trade, record the result with `main.py record-outcome ID WIN` (optionally
+add `--return-percent`). Once at least 20 completed outcomes exist for a
+strategy, the report blends its observed win rate into the estimated
+probability.

@@ -3,7 +3,7 @@ from kiteconnect import KiteConnect
 api_key = "jv3alf8aezsru0u3"
 api_secret = "sdlf7jnoahkjn8kb2xiq69trwk3eymv7"
 
-request_token = "CUTKYb5oQWgVr1HdBWr907X9hg4wfbQq"
+request_token = "fXFYvkkGYdmu9fn3i01irq1mIBfmhgf3"
 
 kite = KiteConnect(api_key=api_key)
 

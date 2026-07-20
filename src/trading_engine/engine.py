@@ -15,6 +15,19 @@ from src.decision.decision_engine import DecisionEngine
 
 class TradingEngine:
 
+    @staticmethod
+    def _market_quality(df):
+        """Return objective data-quality flags used to avoid fragile setups."""
+        closes = df["Close"].astype(float)
+        returns = closes.pct_change().dropna()
+        gaps = (df["Open"].astype(float) / closes.shift(1) - 1).abs().dropna()
+        return {
+            "history_days": int(len(df)),
+            "large_return_days": int((returns.abs() >= 0.10).sum()),
+            "large_gap_days": int((gaps >= 0.07).sum()),
+            "realized_volatility_percent": round(float(returns.std() * (252 ** .5) * 100), 2) if not returns.empty else 0,
+        }
+
     def __init__(self, provider=None):
 
         self.provider = provider or DataProvider()
@@ -85,6 +98,8 @@ class TradingEngine:
             "breakout": breakout,
 
             "candlestick": candlestick,
+
+            "market_quality": self._market_quality(df),
 
             "decision": decision
 

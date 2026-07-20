@@ -10,9 +10,13 @@ class KiteDataProvider:
 
     def __init__(self, provider: KiteProvider | None = None):
         self.provider = provider or KiteProvider()
+        self._history_cache = {}
 
     def get_data(self, symbol: str):
-        return self.provider.get_historical_data(symbol)
+        key = symbol.upper().removesuffix(".NS")
+        if key not in self._history_cache:
+            self._history_cache[key] = self.provider.get_historical_data(key)
+        return self._history_cache[key].copy()
 
     def get_symbols(self) -> list[str]:
         """Get the current F&O equity universe directly from Kite."""
