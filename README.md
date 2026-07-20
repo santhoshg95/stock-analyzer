@@ -105,9 +105,11 @@ performance.
 
 Each daily recommendation receives a `recommendation_id`. After closing the
 paper trade, record the result with `main.py record-outcome ID WIN` (optionally
-add `--return-percent`). Once at least 20 completed outcomes exist for a
+add `--return-percent`, `--exit-price`, `--mfe-percent`, and `--mae-percent`).
+The outcome store also records the predicted probability, entry, stop, targets,
+readiness, expected value, probability error, and Brier score. Once at least 20 completed outcomes exist for a
 strategy, the report blends its observed win rate into the estimated
-probability.
+probability; 200 outcomes is the report's validation milestone.
 The daily report risk-reviews the top 20 ranked stocks by default, independently
 of the final trade `--limit`. Override this with `RANKING_SHORTLIST_SIZE` (1–30).
 Equity setups use confidence-aware reward/risk floors: A-grade 1.5

@@ -20,7 +20,8 @@ from src.options.short_put import ShortPutStrategyEngine
 from src.workflow.decision_policy import (
     classify_setup, market_alignment, normalize_market_regime,
     option_confidence_status, pcr_adjustment, market_risk_scale,
-    combine_strategy_eligibility, risk_reward_tier,
+    combine_strategy_eligibility, risk_reward_tier, adaptive_market_policy,
+    expected_value,
 )
 
 logger = logging.getLogger(__name__)
@@ -107,8 +108,9 @@ class DailyTradingAssistant:
              "detail": sector_data.get("rating", "UNAVAILABLE")},
             {"name": "risk_reward", "passed": candidate["trade_plan"]["risk_reward"] >= self.platform.settings.equity_min_risk_reward,
              "detail": f"1:{candidate['trade_plan']['risk_reward']} (minimum 1:{self.platform.settings.equity_min_risk_reward})"},
-            {"name": "option_execution", "passed": option.get("available", False),
-             "detail": "executable structure available" if option.get("available") else option.get("reason", "option data unavailable")},
+            {"name": "option_context", "passed": option_confidence_status(option.get("confidence")) not in {"CONFLICT", "UNRELIABLE"},
+             "detail": ("supportive option evidence" if option.get("available")
+                        else "option evidence unavailable — neutral")},
         ]
         seasonality = seasonality or {}
         checks.append({
@@ -130,8 +132,9 @@ class DailyTradingAssistant:
         })
         passed = sum(item["passed"] for item in checks)
         percentage = round(passed * 100 / len(checks)) if checks else 0
-        classification = "READY" if percentage >= 85 else "WATCH" if percentage >= 70 else "WAIT" if percentage >= 50 else "IGNORE"
-        return {"ready": classification == "READY", "passed": passed, "total": len(checks),
+        classification = ("EXECUTE" if percentage >= 90 else "PREPARE_ORDER" if percentage >= 75
+                          else "WATCH_INTRADAY" if percentage >= 60 else "IGNORE")
+        return {"ready": classification == "EXECUTE", "passed": passed, "total": len(checks),
                 "percentage": percentage, "classification": classification,
                 "checks": checks, "next_actions": [item["detail"] for item in checks if not item["passed"]]}
 
@@ -191,7 +194,22 @@ class DailyTradingAssistant:
             "events": [], "headlines": [], "analysis_method": "NOT_REQUESTED",
             "score_impact": 0, "trade_impact": "NONE",
             "reasons": ["News analysis was deferred because this stock was not in the final news shortlist."],
+            "collection_state": "NOT_FETCHED", "analysis_state": "NOT_RUN",
         }
+
+    @staticmethod
+    def _normalize_news_state(news: dict[str, Any]) -> dict[str, Any]:
+        """Separate headline collection from AI sentiment availability."""
+        count = int(news.get("article_count") or len(news.get("headlines", [])))
+        requested = news.get("requested", True)
+        collection = ("NOT_FETCHED" if not requested else
+                      "FETCHED" if count > 0 else "FETCH_FAILED_OR_EMPTY")
+        method = news.get("analysis_method", "UNAVAILABLE")
+        analysis = ("ANALYZED" if news.get("available") else
+                    "FAILED" if count > 0 and method in {"AI_UNAVAILABLE", "UNAVAILABLE"} else
+                    "NOT_RUN")
+        return {**news, "collection_state": news.get("collection_state", collection),
+                "analysis_state": news.get("analysis_state", analysis)}
 
     def _trade(self, rank: int, candidate: dict[str, Any], market: dict[str, Any],
                sector_strength: dict[str, Any], news: dict[str, Any] | None = None,
@@ -256,7 +274,9 @@ class DailyTradingAssistant:
                 "confidence": 0, "article_count": 0, "events": [], "headlines": [],
                 "analysis_method": "UNAVAILABLE", "score_impact": 0,
                 "reasons": ["News analysis requires live mode (MARKET_DATA_SOURCE=kite)."],
+                "requested": False,
             }
+        news = self._normalize_news_state(news)
         short_put = option.get("short_put", {"available": False, "rejection_code": "OPTION_DATA_UNAVAILABLE",
                                              "rejection_reasons": ["Short-Put analysis is unavailable."]})
         short_put = ShortPutStrategyEngine.apply_context(
@@ -317,6 +337,7 @@ class DailyTradingAssistant:
             calibrated_probability = self.outcomes.calibrated_probability(candidate["action"])
         if calibrated_probability is not None:
             probability = round((probability * 0.4) + (calibrated_probability * 0.6), 2)
+        expectancy = expected_value(probability, plan["expected_reward"], plan["risk"])
         reasons = [
             candidate["reason"],
             f"Trend: {analysis['analysis']['trend']}.",
@@ -336,8 +357,15 @@ class DailyTradingAssistant:
         )
         minimum_equity_rr = rr_tier["minimum"]
         low_risk_reward = not rr_tier["approved"]
+        readiness = self._trade_readiness(analysis, candidate, alignment, sector_data, option, setup,
+                                          seasonality, regime_history)
+        market_policy = adaptive_market_policy(normalized_regime)
+        readiness_approved = readiness["percentage"] >= market_policy["readiness_minimum"]
+        confirmation_approved = entry_eligible or (
+            not market_policy["confirmation_required"] and readiness_approved
+        )
         strategy_eligibility = combine_strategy_eligibility(
-            entry_eligible, plan["risk_reward"], minimum_equity_rr, short_put_approved,
+            confirmation_approved, plan["risk_reward"], minimum_equity_rr, short_put_approved,
         )
         # Reversal candidates remain observable while their entry develops;
         # inadequate R:R still makes them ineligible for an actual trade.
@@ -353,7 +381,10 @@ class DailyTradingAssistant:
         )
         if critical_failure or unified_score < 55:
             status = "REJECTED"
-        elif (not short_put_approved and (not entry_eligible or unified_score < 72 or low_risk_reward or setup in {"BULLISH_PULLBACK", "BEARISH_BOUNCE", "REVERSAL CANDIDATE"}
+        elif (not short_put_approved and (not confirmation_approved
+              or not readiness_approved
+              or unified_score < market_policy["trade_score_minimum"] or low_risk_reward
+              or setup in {"BULLISH_PULLBACK", "BEARISH_BOUNCE", "REVERSAL CANDIDATE"}
               or (market.get("confidence", 0) >= 65 and alignment["status"] == "CONFLICT"))):
             status = "WATCHLIST"
         else:
@@ -371,9 +402,9 @@ class DailyTradingAssistant:
         if unified_score < 55:
             status_reasons.append(f"Final score {unified_score} is below 55.")
         if status == "WATCHLIST":
-            if unified_score < 72:
-                status_reasons.append(f"Final score {unified_score} has not reached the 72 trade threshold.")
-            if not entry_eligible:
+            if unified_score < market_policy["trade_score_minimum"]:
+                status_reasons.append(f"Final score {unified_score} has not reached the {market_policy['trade_score_minimum']} {market_policy['profile']} threshold.")
+            if not confirmation_approved:
                 missing = setup_evaluation.get("stage_2", {}).get("missing", [])
                 status_reasons.append("Entry confirmation missing: " + ", ".join(missing))
             if option_status in {"CONFLICT", "UNRELIABLE"} and not budget_only_option_failure:
@@ -391,8 +422,6 @@ class DailyTradingAssistant:
         eligibility = {"eligible": status == "TRADE", "status": status,
                        "blocking_reasons": status_reasons,
                        "model_confidence_does_not_imply_eligibility": True}
-        readiness = self._trade_readiness(analysis, candidate, alignment, sector_data, option, setup,
-                                          seasonality, regime_history)
         trade = {
             "rank": rank,
             "symbol": candidate["symbol"],
@@ -417,6 +446,8 @@ class DailyTradingAssistant:
                 "reasons": short_put.get("rejection_reasons", []),
             },
             "trade_readiness": readiness,
+            "market_policy": market_policy,
+            "expected_value": expectancy,
             "current_month_seasonality": {**seasonality, "score_adjustment": round(seasonality_adjustment, 2)},
             "regime_history": {**regime_history, "score_adjustment": round(regime_adjustment, 2)},
             "risk_policy": {"configured_risk_percent": self.platform.settings.risk_percent,
@@ -549,6 +580,7 @@ class DailyTradingAssistant:
                         record_recommendation=False)
             for index, candidate in enumerate(candidates, start=1)
         ]
+        preliminary.sort(key=lambda item: (item["expected_value"]["risk_multiple"], item["ai_score"]), reverse=True)
         preliminary_seconds = perf_counter() - preliminary_started
         logger.info("Daily stage preliminary review: %.3fs", preliminary_seconds)
 
@@ -601,6 +633,7 @@ class DailyTradingAssistant:
                         relative_strength=strength_by_symbol[candidate["symbol"]])
             for index, candidate in enumerate(candidates, start=1)
         ]
+        reviewed.sort(key=lambda item: (item["expected_value"]["risk_multiple"], item["ai_score"]), reverse=True)
         final_review_seconds = perf_counter() - final_review_started
         logger.info("Daily stage final review: %.3fs", final_review_seconds)
         rejected = [trade for trade in reviewed if trade["status"] == "REJECTED"]

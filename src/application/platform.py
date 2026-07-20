@@ -600,9 +600,22 @@ class TradingPlatform:
         if not isinstance(quantity, int) or quantity <= 0:
             raise ValidationError("quantity must be a positive integer")
         try:
-            return self.paper_broker.place_order(
+            position_before = next((item for item in self.paper_broker.positions()
+                                    if item["symbol"] == analysis["symbol"]), None)
+            order = self.paper_broker.place_order(
                 analysis["symbol"], side, quantity, price=analysis["analysis"]["current_price"]
             )
+            outcomes = OutcomeRepository()
+            if side == "BUY" and position_before is None:
+                order["recommendation_id"] = outcomes.record_paper_entry(order, analysis)
+            elif side == "SELL":
+                position_after = next((item for item in self.paper_broker.positions()
+                                       if item["symbol"] == analysis["symbol"]), None)
+                if position_after is None:
+                    order["recommendation_id"] = outcomes.close_paper_trade(
+                        analysis["symbol"], order["filled_price"], order["order_id"]
+                    )
+            return order
         except ValueError as exc:
             raise OrderError(str(exc)) from exc
 
@@ -621,14 +634,24 @@ class TradingPlatform:
             raise ValidationError("minimum_score must be an integer between 0 and 100")
         return self._serialize(DailyTradingAssistant(self).generate(limit, minimum_score))
 
-    def record_trade_outcome(self, recommendation_id: str, won: bool, return_percent: float | None = None) -> dict[str, Any]:
+    def record_trade_outcome(self, recommendation_id: str, won: bool,
+                             return_percent: float | None = None,
+                             exit_price: float | None = None,
+                             mfe_percent: float | None = None,
+                             mae_percent: float | None = None) -> dict[str, Any]:
         if not isinstance(recommendation_id, str) or not recommendation_id:
             raise ValidationError("recommendation_id is required")
         if not isinstance(won, bool):
             raise ValidationError("won must be true or false")
         if return_percent is not None and not isinstance(return_percent, (int, float)):
             raise ValidationError("return_percent must be numeric")
-        saved = OutcomeRepository().record_outcome(recommendation_id, won, return_percent)
+        for name, value in (("exit_price", exit_price), ("mfe_percent", mfe_percent),
+                            ("mae_percent", mae_percent)):
+            if value is not None and not isinstance(value, (int, float)):
+                raise ValidationError(f"{name} must be numeric")
+        saved = OutcomeRepository().record_outcome(
+            recommendation_id, won, return_percent, exit_price, mfe_percent, mae_percent
+        )
         if not saved:
             raise ValidationError("recommendation_id was not found")
         return {"recommendation_id": recommendation_id, "recorded": True}

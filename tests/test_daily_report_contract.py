@@ -21,6 +21,14 @@ class DailyReportContractTests(unittest.TestCase):
         ])
         self.assertAlmostEqual(score, (80 * .55 + 60 * .05) / .60)
 
+    def test_news_collection_and_analysis_states_are_independent(self):
+        news = DailyTradingAssistant._normalize_news_state({
+            "available": False, "article_count": 2,
+            "headlines": [{"title": "Results"}], "analysis_method": "AI_UNAVAILABLE",
+        })
+        self.assertEqual(news["collection_state"], "FETCHED")
+        self.assertEqual(news["analysis_state"], "FAILED")
+
     @patch("src.workflow.daily_trading_assistant.OutcomeRepository")
     def test_cache_report_contains_actionable_trade_fields(self, outcome_repository):
         outcome_repository.return_value.calibrated_probability.return_value = None
@@ -59,6 +67,13 @@ class DailyReportContractTests(unittest.TestCase):
             self.assertIn("trade_eligibility", trade)
             self.assertIn("trade_readiness", trade)
             self.assertIn("risk_reward_policy", trade)
+            self.assertIn("expected_value", trade)
+            self.assertIn("market_policy", trade)
+            self.assertIn(trade["trade_readiness"]["classification"], {
+                "EXECUTE", "PREPARE_ORDER", "WATCH_INTRADAY", "IGNORE",
+            })
+            self.assertIn("collection_state", trade["news"])
+            self.assertIn("analysis_state", trade["news"])
             self.assertIn("current_month_seasonality", trade)
             self.assertTrue(trade["option_budget_policy"]["stock_eligibility_independent"])
         self.assertIn("TODAY'S MARKET SUMMARY", DailyReportPresenter.render(report))

@@ -70,6 +70,35 @@ def risk_reward_tier(score: float, risk_reward: float, a_minimum: float = 1.5,
             "watchlist_eligible": risk_reward >= c_minimum}
 
 
+def adaptive_market_policy(regime: str) -> dict:
+    """Return transparent execution thresholds for the current market regime."""
+    regime = (regime or "UNAVAILABLE").upper()
+    if regime in {"BULLISH", "STRONG_BULLISH"}:
+        return {"profile": "AGGRESSIVE_TREND", "trade_score_minimum": 70,
+                "readiness_minimum": 75, "confirmation_required": False,
+                "preferred_strategies": ["TREND_FOLLOWING", "BREAKOUT", "PULLBACK"]}
+    if regime in {"BEARISH", "STRONG_BEARISH"}:
+        return {"profile": "DEFENSIVE", "trade_score_minimum": 78,
+                "readiness_minimum": 90, "confirmation_required": True,
+                "preferred_strategies": ["CONFIRMED_BREAKOUT", "DEFINED_RISK_OPTIONS"]}
+    if regime in {"SIDEWAYS", "RANGE_BOUND", "NEUTRAL"}:
+        return {"profile": "RANGE", "trade_score_minimum": 72,
+                "readiness_minimum": 75, "confirmation_required": True,
+                "preferred_strategies": ["MEAN_REVERSION", "SHORT_PUT", "CREDIT_SPREAD"]}
+    return {"profile": "CAUTIOUS", "trade_score_minimum": 75,
+            "readiness_minimum": 85, "confirmation_required": True,
+            "preferred_strategies": ["CONFIRMED_ENTRY", "DEFINED_RISK_OPTIONS"]}
+
+
+def expected_value(win_probability: float, expected_reward: float, risk: float) -> dict:
+    """Calculate currency EV and the equivalent multiple of initial risk."""
+    probability = min(100.0, max(0.0, float(win_probability))) / 100
+    value = probability * expected_reward - (1 - probability) * risk
+    return {"amount": round(value, 2),
+            "risk_multiple": round(value / risk, 3) if risk > 0 else 0.0,
+            "win_probability": round(probability * 100, 2)}
+
+
 def combine_strategy_eligibility(entry_confirmed: bool, equity_risk_reward: float,
                                  minimum_equity_risk_reward: float,
                                  short_put_approved: bool) -> dict:
