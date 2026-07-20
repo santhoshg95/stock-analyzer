@@ -9,7 +9,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
+from copy import deepcopy
 import re
+from threading import Lock
+from time import monotonic
 from typing import Any
 from urllib.parse import quote_plus
 from xml.etree import ElementTree
@@ -22,6 +25,20 @@ from src.news.ai_sentiment import AISentimentAnalyzer, AISentimentError
 class NewsAnalysisService:
     """Fetch news and delegate all semantic interpretation to an AI model."""
 
+    _analyzer: AISentimentAnalyzer | None = None
+    _analyzer_lock = Lock()
+    _cache_lock = Lock()
+    _cache: dict[str, tuple[float, dict[str, Any]]] = {}
+    cache_ttl_seconds = 30 * 60
+
+    @classmethod
+    def _shared_analyzer(cls) -> AISentimentAnalyzer:
+        if cls._analyzer is None:
+            with cls._analyzer_lock:
+                if cls._analyzer is None:
+                    cls._analyzer = AISentimentAnalyzer()
+        return cls._analyzer
+
     @staticmethod
     def _text(value: str) -> str:
         return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", unescape(value or ""))).strip()
@@ -30,6 +47,12 @@ class NewsAnalysisService:
     def analyze(cls, symbol: str, timeout: float = 4.0, limit: int = 8,
                 analyzer: AISentimentAnalyzer | None = None) -> dict[str, Any]:
         """Return a bounded sentiment/event assessment for a stock symbol."""
+        cache_key = symbol.strip().upper().removesuffix(".NS")
+        if analyzer is None:
+            with cls._cache_lock:
+                cached = cls._cache.get(cache_key)
+                if cached and monotonic() - cached[0] < cls.cache_ttl_seconds:
+                    return deepcopy(cached[1])
         url = "https://news.google.com/rss/search?q=" + quote_plus(f"{symbol} NSE stock") + "&hl=en-IN&gl=IN&ceid=IN:en"
         try:
             response = requests.get(url, timeout=timeout, headers={"User-Agent": "stock-analyzer/1.0"})
@@ -66,7 +89,7 @@ class NewsAnalysisService:
                     "article_count": 0, "events": [], "headlines": [], "materiality": "NONE",
                     "trade_impact": "NONE", "analysis_method": "UNAVAILABLE", "score_impact": 0,
                     "reasons": ["No news articles were available for AI analysis; score impact is neutral."]}
-        ai_analyzer = analyzer or AISentimentAnalyzer()
+        ai_analyzer = analyzer or cls._shared_analyzer()
         try:
             assessment = ai_analyzer.analyze(symbol, articles)
         except AISentimentError as exc:
@@ -75,7 +98,7 @@ class NewsAnalysisService:
                     "materiality": "NONE", "trade_impact": "NONE",
                     "score_impact": 0,
                     "reasons": [f"{exc} Score impact is neutral."], "analysis_method": "AI_UNAVAILABLE"}
-        return {
+        result = {
             "available": True,
             "score": round(float(assessment["score"]), 2),
             "sentiment": assessment["sentiment"],
@@ -92,6 +115,10 @@ class NewsAnalysisService:
             "model": ai_analyzer.model,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
+        if analyzer is None:
+            with cls._cache_lock:
+                cls._cache[cache_key] = (monotonic(), deepcopy(result))
+        return result
 
     @staticmethod
     def _published(value: str) -> str | None:

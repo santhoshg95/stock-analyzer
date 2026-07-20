@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from statistics import mean
+from threading import RLock
 from typing import Any
 
 
@@ -20,26 +21,28 @@ class AISentimentAnalyzer:
         self.spacy_model = spacy_model or os.getenv("NEWS_SPACY_MODEL", "en_core_web_sm")
         self._sentiment_pipeline = sentiment_pipeline
         self._nlp = nlp
+        self._model_lock = RLock()
 
     def _load(self) -> None:
-        if self._sentiment_pipeline is None:
-            try:
-                from transformers import pipeline
-                self._sentiment_pipeline = pipeline(
-                    "text-classification", model=self.model, tokenizer=self.model,
-                )
-            except (ImportError, OSError, RuntimeError) as exc:
-                raise AISentimentError(
-                    "FinBERT is unavailable. Install requirements and download the configured NEWS_FINBERT_MODEL."
-                ) from exc
-        if self._nlp is None:
-            try:
-                import spacy
-                self._nlp = spacy.load(self.spacy_model)
-            except (ImportError, OSError) as exc:
-                raise AISentimentError(
-                    f"spaCy model {self.spacy_model!r} is unavailable; run: python -m spacy download {self.spacy_model}"
-                ) from exc
+        with self._model_lock:
+            if self._sentiment_pipeline is None:
+                try:
+                    from transformers import pipeline
+                    self._sentiment_pipeline = pipeline(
+                        "text-classification", model=self.model, tokenizer=self.model,
+                    )
+                except (ImportError, OSError, RuntimeError) as exc:
+                    raise AISentimentError(
+                        "FinBERT is unavailable. Install requirements and download the configured NEWS_FINBERT_MODEL."
+                    ) from exc
+            if self._nlp is None:
+                try:
+                    import spacy
+                    self._nlp = spacy.load(self.spacy_model)
+                except (ImportError, OSError) as exc:
+                    raise AISentimentError(
+                        f"spaCy model {self.spacy_model!r} is unavailable; run: python -m spacy download {self.spacy_model}"
+                    ) from exc
 
     @staticmethod
     def _probabilities(raw_result) -> dict[str, float]:
@@ -60,33 +63,35 @@ class AISentimentAnalyzer:
     def analyze(self, symbol: str, articles: list[dict[str, Any]]) -> dict[str, Any]:
         self._load()
         assessments, signed_scores, confidences, all_entities = [], [], [], []
-        for article in articles:
-            text = " ".join(filter(None, (article.get("title"), article.get("description"))))
-            if not text.strip():
-                continue
-            probabilities = self._probabilities(
-                self._sentiment_pipeline(text, top_k=None, truncation=True)
-            )
-            signed_score = (probabilities["positive"] - probabilities["negative"]) * 100
-            label = self._label(signed_score)
-            confidence = max(probabilities.values()) * 100
-            doc = self._nlp(text)
-            entities = [
-                {"text": entity.text, "label": entity.label_}
-                for entity in doc.ents
-                if entity.text.strip()
-            ]
-            all_entities.extend(entities)
-            materiality = "HIGH" if abs(signed_score) >= 60 and confidence >= 70 else "MEDIUM" if abs(signed_score) >= 30 else "LOW"
-            assessments.append({
-                "title": str(article.get("title", "")), "sentiment": label,
-                "materiality": materiality,
-                "summary": f"FinBERT {label.lower()} probability assessment; {len(entities)} entities extracted.",
-                "probabilities": {key: round(value * 100, 2) for key, value in probabilities.items()},
-                "entities": entities,
-            })
-            signed_scores.append(signed_score)
-            confidences.append(confidence)
+        # The shared transformers/spaCy objects are reused across requests and
+        # guarded because concurrent model inference is not reliably thread-safe.
+        with self._model_lock:
+            for article in articles:
+                text = " ".join(filter(None, (article.get("title"), article.get("description"))))
+                if not text.strip():
+                    continue
+                probabilities = self._probabilities(
+                    self._sentiment_pipeline(text, top_k=None, truncation=True)
+                )
+                signed_score = (probabilities["positive"] - probabilities["negative"]) * 100
+                label = self._label(signed_score)
+                confidence = max(probabilities.values()) * 100
+                doc = self._nlp(text)
+                entities = [
+                    {"text": entity.text, "label": entity.label_}
+                    for entity in doc.ents if entity.text.strip()
+                ]
+                all_entities.extend(entities)
+                materiality = "HIGH" if abs(signed_score) >= 60 and confidence >= 70 else "MEDIUM" if abs(signed_score) >= 30 else "LOW"
+                assessments.append({
+                    "title": str(article.get("title", "")), "sentiment": label,
+                    "materiality": materiality,
+                    "summary": f"FinBERT {label.lower()} probability assessment; {len(entities)} entities extracted.",
+                    "probabilities": {key: round(value * 100, 2) for key, value in probabilities.items()},
+                    "entities": entities,
+                })
+                signed_scores.append(signed_score)
+                confidences.append(confidence)
         if not assessments:
             raise AISentimentError("No usable article text was available for local AI analysis")
 

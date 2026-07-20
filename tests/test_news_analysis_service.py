@@ -15,6 +15,9 @@ RSS = b"""<rss><channel>
 
 
 class NewsAnalysisServiceTests(unittest.TestCase):
+    def tearDown(self):
+        NewsAnalysisService._cache.clear()
+
     @patch("src.news.analysis_service.requests.get")
     def test_ai_bullish_assessment_is_used_without_keyword_scoring(self, get):
         response = Mock(content=RSS)
@@ -83,3 +86,37 @@ class NewsAnalysisServiceTests(unittest.TestCase):
             truncation=True,
         )
         nlp.assert_called_once()
+
+    @patch("src.news.analysis_service.requests.get")
+    def test_default_news_analysis_is_cached_across_requests(self, get):
+        response = Mock(content=RSS)
+        response.raise_for_status.return_value = None
+        get.return_value = response
+        analyzer = Mock(model="shared-model")
+        analyzer.analyze.return_value = {
+            "sentiment": "NEUTRAL", "score": 0, "confidence": 80,
+            "materiality": "LOW", "events": [], "reasoning": ["Neutral."],
+            "trade_impact": "NONE", "article_assessments": [],
+            "analysis_provider": "LOCAL_FINBERT_SPACY",
+        }
+        NewsAnalysisService._cache.clear()
+
+        with patch.object(NewsAnalysisService, "_shared_analyzer", return_value=analyzer):
+            first = NewsAnalysisService.analyze("CACHECO")
+            second = NewsAnalysisService.analyze("CACHECO")
+
+        self.assertEqual(first, second)
+        get.assert_called_once()
+        analyzer.analyze.assert_called_once()
+
+    def test_shared_analyzer_is_constructed_once(self):
+        previous = NewsAnalysisService._analyzer
+        NewsAnalysisService._analyzer = None
+        try:
+            with patch("src.news.analysis_service.AISentimentAnalyzer") as analyzer_class:
+                first = NewsAnalysisService._shared_analyzer()
+                second = NewsAnalysisService._shared_analyzer()
+            self.assertIs(first, second)
+            analyzer_class.assert_called_once()
+        finally:
+            NewsAnalysisService._analyzer = previous

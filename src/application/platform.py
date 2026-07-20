@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
 import re
 import logging
-from time import sleep
-from threading import Lock
+from time import monotonic, perf_counter, sleep
+from threading import Lock, RLock
 from typing import Any
 
 import numpy as np
@@ -66,6 +67,9 @@ class TradingPlatform:
         self.engine = TradingEngine(provider=self.provider)
         self.paper_broker = paper_broker or PaperBroker(starting_cash=self.settings.capital)
         self._option_chain_provider = None
+        self._option_cache: dict[tuple, tuple[float, dict[str, Any]]] = {}
+        self._option_cache_lock = RLock()
+        self._option_cache_ttl_seconds = 120
 
     @staticmethod
     def _symbol(symbol: str) -> str:
@@ -240,7 +244,9 @@ class TradingPlatform:
         if not isinstance(minimum_score, int) or not 0 <= minimum_score <= 100:
             raise ValidationError("minimum_score must be an integer between 0 and 100")
 
+        started = perf_counter()
         symbols = self._universe_symbols()
+        universe_seconds = perf_counter() - started
         if not symbols:
             raise DataUnavailableError("No stocks are available to screen")
 
@@ -307,12 +313,15 @@ class TradingPlatform:
                 sleep(0.35)
             return candidate
 
+        scan_started = perf_counter()
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = [executor.submit(rate_limited_evaluate, symbol) for symbol in symbols]
             for future in as_completed(futures):
                 candidate = future.result()
                 if candidate:
                     candidates.append(candidate)
+        scan_seconds = perf_counter() - scan_started
+        logger.info("Technical scan: %.3fs for %d symbols", scan_seconds, len(symbols))
 
         action_rank = {"BUY": 2, "BUY ON DIP": 1, "WATCH": 0}
         candidates.sort(
@@ -325,7 +334,8 @@ class TradingPlatform:
             reverse=True,
         )
         top_candidates = candidates[:limit]
-        for candidate in top_candidates:
+
+        def enrich(candidate: dict[str, Any]) -> dict[str, Any]:
             historical = self._historical_context(candidate["symbol"])
             candidate["current_month_seasonality"] = historical["current_month"]
             candidate["regime_history"] = historical["regime"]
@@ -342,12 +352,33 @@ class TradingPlatform:
                 f"Candlestick: {candidate['candlestick']['pattern']} ({candidate['candlestick']['signal']}).",
                 *candidate["options"].get("reasons", []),
             ]
+            return candidate
+
+        enrichment_started = perf_counter()
+        # Only finalists are enriched. Two workers overlap independent I/O
+        # without producing an aggressive burst against Kite's API limits.
+        if len(top_candidates) > 1:
+            with ThreadPoolExecutor(max_workers=min(2, len(top_candidates))) as executor:
+                top_candidates = list(executor.map(enrich, top_candidates))
+        else:
+            top_candidates = [enrich(candidate) for candidate in top_candidates]
+        enrichment_seconds = perf_counter() - enrichment_started
+        logger.info("Historical/option enrichment: %.3fs for %d candidates",
+                    enrichment_seconds, len(top_candidates))
+        timings = {
+            "universe_seconds": round(universe_seconds, 3),
+            "technical_scan_seconds": round(scan_seconds, 3),
+            "historical_and_options_seconds": round(enrichment_seconds, 3),
+            "total_seconds": round(perf_counter() - started, 3),
+        }
+        logger.info("Suggestion stages completed: %s", timings)
         return {
             "universe_size": len(symbols),
             "market_data_source": self.settings.market_data_source,
             "minimum_score": minimum_score,
             "suggestions": top_candidates,
             "statistics": stage_counts,
+            "timings": timings,
             "message": (
                 "No stocks currently meet the selected criteria."
                 if not candidates
@@ -356,6 +387,19 @@ class TradingPlatform:
         }
 
     def _option_trade_plan(self, candidate: dict[str, Any]) -> dict[str, Any]:
+        key = (
+            candidate["symbol"], round(float(candidate["current_price"]), 1),
+            self.settings.trading_strategy_mode,
+        )
+        with self._option_cache_lock:
+            cached = self._option_cache.get(key)
+            if cached and monotonic() - cached[0] < self._option_cache_ttl_seconds:
+                return deepcopy(cached[1])
+            result = self._option_trade_plan_uncached(candidate)
+            self._option_cache[key] = (monotonic(), deepcopy(result))
+            return result
+
+    def _option_trade_plan_uncached(self, candidate: dict[str, Any]) -> dict[str, Any]:
         """Enrich only final candidates with live option-chain intelligence."""
         if self.settings.market_data_source != "kite":
             return {"available": False, "error_type": "DATA_SOURCE",

@@ -32,6 +32,10 @@ class DailyReportContractTests(unittest.TestCase):
         self.assertEqual(report["report_type"], "daily_trading_assistant")
         self.assertIn("filter_stages", report)
         self.assertIn("sector_ranking", report)
+        self.assertIn("timings", report)
+        self.assertIn("total_seconds", report["timings"])
+        self.assertLessEqual(report["timings"]["candidates_enriched"], 6)
+        self.assertEqual(report["timings"]["news_stocks_requested"], 0)
         self.assertEqual(
             report["summary"]["trades_generated"] + report["summary"]["watchlisted"]
             + report["summary"]["rejected"],

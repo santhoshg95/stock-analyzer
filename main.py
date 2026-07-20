@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 
 from src.application.errors import PlatformError
 from src.application.platform import TradingPlatform
@@ -7,6 +8,7 @@ from src.presenter.daily_report import DailyReportPresenter
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description="AI Quantitative Trading Platform")
     subcommands = parser.add_subparsers(dest="command", required=True)
     for name in ("analyze", "backtest"):

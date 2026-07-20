@@ -1,0 +1,40 @@
+import pandas as pd
+
+from src.data_provider.kite_data_provider import KiteDataProvider
+
+
+class FakeKiteProvider:
+    def __init__(self):
+        self.calls = []
+
+    def get_historical_data(self, symbol, period="1y"):
+        self.calls.append((symbol, period))
+        return pd.DataFrame(
+            {"Open": [100.0], "High": [102.0], "Low": [99.0],
+             "Close": [101.0], "Volume": [1000]},
+            index=pd.DatetimeIndex(["2026-07-17"], name="Date"),
+        )
+
+
+def test_long_history_is_reused_from_disk_after_restart(tmp_path):
+    provider = FakeKiteProvider()
+    first = KiteDataProvider(provider, long_history_cache_directory=tmp_path)
+
+    downloaded = first.get_long_history("RELIANCE", period="10y")
+
+    restarted = KiteDataProvider(provider, long_history_cache_directory=tmp_path)
+    cached = restarted.get_long_history("RELIANCE", period="10y")
+
+    assert provider.calls == [("RELIANCE", "10y")]
+    pd.testing.assert_frame_equal(cached, downloaded)
+
+
+def test_long_history_fetches_each_new_symbol_once(tmp_path):
+    provider = FakeKiteProvider()
+    data = KiteDataProvider(provider, long_history_cache_directory=tmp_path)
+
+    data.get_long_history("INFY", period="10y")
+    data.get_long_history("INFY.NS", period="10y")
+    data.get_long_history("TCS", period="10y")
+
+    assert provider.calls == [("INFY", "10y"), ("TCS", "10y")]

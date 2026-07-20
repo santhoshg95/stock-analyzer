@@ -199,6 +199,10 @@ class DailyReportPresenter:
             f"Average watchlist probability: {summary['average_watchlist_probability']}%" if summary.get("average_watchlist_probability") is not None else "Average watchlist probability: N/A",
             f"Market risk          : {summary['market_risk']}",
             f"Recommendation       : {summary['recommendation']}", line,
+            "EXECUTION TIMINGS", "-" * 68,
+            *[f"{name:<32}: {value}{' stocks' if name.endswith('_requested') or name == 'candidates_enriched' else 's'}"
+              for name, value in report.get("timings", {}).items()],
+            line,
             "FILTER FUNNEL", "-" * 68,
             *[f"{item['stage']:<20}: {item['input']} in / {item['passed']} passed / {item['rejected']} rejected"
               + (f" / {item['deferred']} deferred" if item.get('deferred') else "")

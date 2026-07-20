@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from datetime import date
+import logging
+from time import perf_counter
 from typing import Any
 
 from src.sector.sector_mapper import SectorMapper
@@ -19,6 +22,8 @@ from src.workflow.decision_policy import (
     option_confidence_status, pcr_adjustment, market_risk_scale,
     combine_strategy_eligibility,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DailyTradingAssistant:
@@ -172,11 +177,26 @@ class DailyTradingAssistant:
                 "critical_conflicts": critical_conflicts,
                 "decision": "APPROVED" if not critical_conflicts else "EXCLUDED"}
 
-    def _trade(self, rank: int, candidate: dict[str, Any], market: dict[str, Any], sector_strength: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _news_not_requested() -> dict[str, Any]:
+        return {
+            "available": False, "requested": False, "score": 0,
+            "sentiment": "NEUTRAL", "confidence": 0, "article_count": 0,
+            "events": [], "headlines": [], "analysis_method": "NOT_REQUESTED",
+            "score_impact": 0, "trade_impact": "NONE",
+            "reasons": ["News analysis was deferred because this stock was not in the final news shortlist."],
+        }
+
+    def _trade(self, rank: int, candidate: dict[str, Any], market: dict[str, Any],
+               sector_strength: dict[str, Any], news: dict[str, Any] | None = None,
+               relative_strength: dict[str, Any] | None = None,
+               record_recommendation: bool = True) -> dict[str, Any]:
         analysis = self.platform.analyze(candidate["symbol"])
         sector = self.sectors.get_sector(candidate["symbol"])
         sector_data = sector_strength.get(sector, {"available": False, "score": 50, "rating": "UNAVAILABLE"})
-        relative_strength = ContextEnrichment(self.platform.settings.market_data_source == "kite").relative_strength(candidate["symbol"])
+        relative_strength = relative_strength or ContextEnrichment(
+            self.platform.settings.market_data_source == "kite"
+        ).relative_strength(candidate["symbol"])
         option = candidate.get("options", {"available": False})
         seasonality = candidate.get("current_month_seasonality", {})
         regime_history = candidate.get("regime_history", {})
@@ -220,11 +240,9 @@ class DailyTradingAssistant:
                       "rejection": {"code": "SCALED_RISK_BUDGET_EXCEEDED", "category": "RISK",
                                     "reason": reason, "maximum_loss": option_trade["maximum_loss"],
                                     "available_budget": scaled_option_risk}}
-        # Offline/cache mode must remain deterministic and must not make hidden
-        # network calls. Live reports fetch news only for these finalists.
-        if self.platform.settings.market_data_source == "kite":
-            news = NewsAnalysisService.analyze(candidate["symbol"])
-        else:
+        if news is None:
+            news = self._news_not_requested()
+        if self.platform.settings.market_data_source != "kite":
             news = {
                 "available": False, "score": 0, "sentiment": "NEUTRAL",
                 "confidence": 0, "article_count": 0, "events": [], "headlines": [],
@@ -442,19 +460,74 @@ class DailyTradingAssistant:
             "calibrated_probability": calibrated_probability,
             "validation": validation,
         }
-        if status == "TRADE":
+        if status == "TRADE" and record_recommendation:
             trade["recommendation_id"] = self.outcomes.record_recommendation(trade)
         else:
             trade["recommendation_id"] = None
         return trade
 
     def generate(self, limit: int = 15, minimum_score: int = 40) -> dict[str, Any]:
-        # Fetch extra technical candidates so rejected news/option conflicts can
-        # be replaced instead of leaving a misleading top-15 list.
-        ranked = self.platform.suggest_stocks(limit=min(50, max(15, limit * 3)), minimum_score=minimum_score)
+        started = perf_counter()
+        # Keep a small replacement buffer, rather than enriching up to 45 names.
+        enrichment_limit = min(20, limit + 5)
+        ranked = self.platform.suggest_stocks(limit=enrichment_limit, minimum_score=minimum_score)
+        screening_seconds = perf_counter() - started
+        logger.info("Daily stage screening: %.3fs", screening_seconds)
+
+        context_started = perf_counter()
         enrichment = ContextEnrichment(self.platform.settings.market_data_source == "kite")
         market_context, sector_strength = enrichment.market_and_sectors()
-        reviewed = [self._trade(index, candidate, market_context, sector_strength) for index, candidate in enumerate(ranked["suggestions"], start=1)]
+        candidates = ranked["suggestions"]
+        # Relative-strength downloads are independent and safely bounded.
+        if len(candidates) > 1:
+            with ThreadPoolExecutor(max_workers=min(4, len(candidates))) as executor:
+                strengths = list(executor.map(
+                    lambda item: enrichment.relative_strength(item["symbol"]), candidates
+                ))
+        else:
+            strengths = [enrichment.relative_strength(item["symbol"]) for item in candidates]
+        strength_by_symbol = {
+            candidate["symbol"]: strength for candidate, strength in zip(candidates, strengths)
+        }
+        context_seconds = perf_counter() - context_started
+        logger.info("Daily stage market/relative strength: %.3fs", context_seconds)
+
+        preliminary_started = perf_counter()
+        preliminary = [
+            self._trade(index, candidate, market_context, sector_strength,
+                        news=self._news_not_requested(),
+                        relative_strength=strength_by_symbol[candidate["symbol"]],
+                        record_recommendation=False)
+            for index, candidate in enumerate(candidates, start=1)
+        ]
+        preliminary_seconds = perf_counter() - preliminary_started
+        logger.info("Daily stage preliminary review: %.3fs", preliminary_seconds)
+
+        # News is expensive, so request it only for stocks that survived all
+        # technical, market, liquidity, risk, and execution gates. A three-name
+        # buffer allows bearish material news to remove a finalist.
+        news_started = perf_counter()
+        news_target_symbols = [
+            trade["symbol"] for trade in preliminary if trade["status"] != "REJECTED"
+        ][:min(len(preliminary), limit + 3)]
+        news_by_symbol: dict[str, dict[str, Any]] = {}
+        if self.platform.settings.market_data_source == "kite" and news_target_symbols:
+            with ThreadPoolExecutor(max_workers=min(4, len(news_target_symbols))) as executor:
+                results = list(executor.map(NewsAnalysisService.analyze, news_target_symbols))
+            news_by_symbol = dict(zip(news_target_symbols, results))
+        news_seconds = perf_counter() - news_started
+        logger.info("Daily stage targeted news: %.3fs for %d stocks",
+                    news_seconds, len(news_target_symbols))
+
+        final_review_started = perf_counter()
+        reviewed = [
+            self._trade(index, candidate, market_context, sector_strength,
+                        news=news_by_symbol.get(candidate["symbol"], self._news_not_requested()),
+                        relative_strength=strength_by_symbol[candidate["symbol"]])
+            for index, candidate in enumerate(candidates, start=1)
+        ]
+        final_review_seconds = perf_counter() - final_review_started
+        logger.info("Daily stage final review: %.3fs", final_review_seconds)
         rejected = [trade for trade in reviewed if trade["status"] == "REJECTED"]
         watchlist = [trade for trade in reviewed if trade["status"] == "WATCHLIST"]
         trades = [trade for trade in reviewed if trade["status"] == "TRADE"][:limit]
@@ -511,6 +584,17 @@ class DailyTradingAssistant:
             {"stage": "risk", "input": len(reviewed), "passed": risk_valid, "rejected": len(reviewed) - risk_valid},
             {"stage": "final_trade", "input": len(reviewed), "passed": len(trades), "rejected": len(reviewed) - len(trades)},
         ]
+        timings = {
+            "screening_seconds": round(screening_seconds, 3),
+            "market_and_relative_strength_seconds": round(context_seconds, 3),
+            "preliminary_review_seconds": round(preliminary_seconds, 3),
+            "targeted_news_seconds": round(news_seconds, 3),
+            "final_review_seconds": round(final_review_seconds, 3),
+            "total_seconds": round(perf_counter() - started, 3),
+            "news_stocks_requested": len(news_target_symbols),
+            "candidates_enriched": len(candidates),
+        }
+        logger.info("Daily report stages completed: %s", timings)
         return {
             "report_type": "daily_trading_assistant",
             "date": date.today().isoformat(),
@@ -521,6 +605,7 @@ class DailyTradingAssistant:
             "filter_stages": filter_stages,
             "context_statistics": context_statistics,
             "historical_learning": historical_learning,
+            "timings": timings,
             "rejected": [
                 {"symbol": trade["symbol"], "technical_score": trade["technical_score"],
                  "reasons": trade["status_reasons"] or trade["validation"]["conflicts"]}
