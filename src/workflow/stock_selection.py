@@ -9,7 +9,9 @@ def classify_entry_timing(*, current_price: float, levels: dict[str, Any],
                           setup_category: str, breakout_confirmed: bool,
                           entry_confirmed: bool, direction: str = "BULLISH",
                           ema20: float | None = None, atr: float | None = None,
-                          maximum_atr_extension: float = 2.0) -> dict[str, Any]:
+                          maximum_atr_extension: float = 2.0,
+                          entry_zone_below_atr: float = 0.25,
+                          entry_zone_above_atr: float = 0.50) -> dict[str, Any]:
     """Classify whether a qualified setup is sensibly enterable right now."""
     direction = str(direction or "BULLISH").upper()
     setup_category = str(setup_category or "").upper()
@@ -36,10 +38,13 @@ def classify_entry_timing(*, current_price: float, levels: dict[str, Any],
                 "reason": f"Current price {current:.2f} has already reached target {target:.2f}."}
 
     try:
-        extension = (current - float(ema20)) * sign
         atr_value = float(atr)
     except (TypeError, ValueError):
-        extension, atr_value = 0.0, 0.0
+        atr_value = 0.0
+    try:
+        extension = (current - float(ema20)) * sign
+    except (TypeError, ValueError):
+        extension = 0.0
     if atr_value > 0 and extension > maximum_atr_extension * atr_value:
         return {"status": "TOO LATE", "trigger_price": None,
                 "extension_atr": round(extension / atr_value, 2),
@@ -56,6 +61,16 @@ def classify_entry_timing(*, current_price: float, levels: dict[str, Any],
                 "reason": "Price has moved too far from entry; remaining reward/risk is below 1:1."}
 
     if entry_confirmed:
+        if atr_value > 0:
+            signed_distance = (current - entry) * sign
+            if signed_distance < -entry_zone_below_atr * atr_value:
+                return {"status": "WAIT FOR BREAKOUT", "trigger_price": entry,
+                        "entry_distance_atr": round(signed_distance / atr_value, 2),
+                        "reason": f"Price is outside the entry zone; wait for confirmation near {entry:.2f}."}
+            if signed_distance > entry_zone_above_atr * atr_value:
+                return {"status": "WAIT FOR PULLBACK", "trigger_price": entry,
+                        "entry_distance_atr": round(signed_distance / atr_value, 2),
+                        "reason": f"Price is above the valid entry zone; wait for a pullback near {entry:.2f}."}
         return {"status": "BUY NOW", "trigger_price": entry,
                 "remaining_risk_reward": round(remaining_rr, 2),
                 "reason": "Entry is confirmed and price remains inside the valid trade range."}

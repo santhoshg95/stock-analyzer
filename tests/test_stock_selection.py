@@ -21,6 +21,10 @@ class StockSelectionTests(unittest.TestCase):
     def test_buy_now_when_entry_is_confirmed_inside_valid_range(self):
         self.assertEqual(classify()["status"], "BUY NOW")
 
+    def test_confirmed_entry_must_still_be_inside_atr_entry_zone(self):
+        self.assertEqual(classify(current=98, entry=100, atr=4)["status"], "WAIT FOR BREAKOUT")
+        self.assertEqual(classify(current=103, entry=100, atr=4)["status"], "WAIT FOR PULLBACK")
+
     def test_wait_for_breakout_when_confirmation_is_missing(self):
         result = classify(current=99, breakout=False, confirmed=False)
         self.assertEqual(result["status"], "WAIT FOR BREAKOUT")

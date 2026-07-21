@@ -754,9 +754,10 @@ class TradingPlatform:
             if begin_live_refresh is not None:
                 begin_live_refresh(self._universe_symbols())
                 live_refresh_started = True
-            report = DailyTradingAssistant(
+            assistant = (DailyTradingAssistant(
                 self, option_month=option_month, excluded_symbols=excluded_symbols
-            ).generate(
+            ) if excluded_symbols else DailyTradingAssistant(self, option_month=option_month))
+            report = assistant.generate(
                 limit, minimum_score
             )
             return self._serialize(report)

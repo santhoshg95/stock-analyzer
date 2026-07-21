@@ -258,8 +258,8 @@ def execution_mark_control(database: ReportDatabase | None, run_id: str, symbol:
         st.success(f"{symbol} saved as {mark}.")
 
 
-def start_recommended_trade_control(database: ReportDatabase, run_id: str,
-                                    trade: dict[str, Any]) -> None:
+def start_recommended_trade_control(platform: TradingPlatform, database: ReportDatabase,
+                                    run_id: str, trade: dict[str, Any]) -> None:
     """Turn a recommendation into a durable open position from the report UI."""
     symbol = str(trade.get("symbol", "")).upper().removesuffix(".NS")
     tracked = database.get_candidate_trade(run_id, symbol)
@@ -274,24 +274,34 @@ def start_recommended_trade_control(database: ReportDatabase, run_id: str,
         st.caption(f"Exited on {tracked.get('exit_date')} at ₹{float(tracked.get('exit_price') or 0):,.2f}")
         return
     levels = trade.get("levels") or {}
-    suggested_entry = float(levels.get("entry") or trade.get("current_price") or 1)
+    live_entry = _polled_equity_price(platform, symbol)
     suggested_hold = date.today() + timedelta(days=10)
     with st.form(f"start-trade-{run_id}-{symbol}"):
         st.markdown("**I traded this stock**")
         st.caption("Saving here creates the active trade automatically; no separate Trade Tracker entry is needed.")
-        columns = st.columns(4)
+        columns = st.columns(3)
         quantity = columns[0].number_input("Quantity", min_value=1, value=1, step=1,
                                            key=f"qty-{run_id}-{symbol}")
-        entry_price = columns[1].number_input("Actual entry price", min_value=0.01,
-                                              value=suggested_entry, step=0.05,
-                                              key=f"entry-{run_id}-{symbol}")
-        entry_date = columns[2].date_input("Trade date", value=date.today(),
+        entry_date = columns[1].date_input("Trade date", value=date.today(),
                                            key=f"entry-date-{run_id}-{symbol}")
-        hold_until = columns[3].date_input("Hold until (review date)", value=suggested_hold,
+        hold_until = columns[2].date_input("Hold until (review date)", value=suggested_hold,
                                            min_value=entry_date,
                                            key=f"hold-{run_id}-{symbol}")
-        submitted = st.form_submit_button("Mark TRADED & start tracking", type="primary")
+        if live_entry is None:
+            st.error("Live spot price is unavailable. Refresh after the Kite quote connection is available.")
+        else:
+            st.metric("Actual entry price (live spot)", f"₹{live_entry:,.2f}")
+            st.caption("The current live spot price will be saved automatically when you mark the trade.")
+        submitted = st.form_submit_button(
+            "Mark TRADED & start tracking", type="primary", disabled=live_entry is None
+        )
     if submitted:
+        # Fetch once more at submission time so the saved entry is the freshest available quote.
+        _polled_equity_price.clear()
+        entry_price = _polled_equity_price(platform, symbol)
+        if entry_price is None:
+            st.error("The live spot price became unavailable. The trade was not saved.")
+            return
         database.set_candidate_execution(run_id, symbol, True)
         action = str(trade.get("final_action") or trade.get("action") or "BUY").upper()
         database.add_actual_trade({
@@ -308,7 +318,8 @@ def start_recommended_trade_control(database: ReportDatabase, run_id: str,
         st.rerun()
 
 
-def selected_stock_details(report: dict[str, Any], database: ReportDatabase | None = None) -> None:
+def selected_stock_details(platform: TradingPlatform, report: dict[str, Any],
+                           database: ReportDatabase | None = None) -> None:
     selected = [*report.get("trades", []), *report.get("watchlist", [])]
     run_id = str(report.get("run_id", ""))
     execution_marks = database.get_candidate_executions(run_id) if database and run_id else {}
@@ -330,7 +341,7 @@ def selected_stock_details(report: dict[str, Any], database: ReportDatabase | No
                 else:
                     st.warning(message)
             if database:
-                start_recommended_trade_control(database, run_id, trade)
+                start_recommended_trade_control(platform, database, run_id, trade)
             else:
                 execution_mark_control(database, run_id, symbol,
                                        execution_marks.get(symbol, "NOT_TRADED"), "selected")
@@ -465,7 +476,8 @@ def show_news(report: dict[str, Any]) -> None:
     )
 
 
-def show_report(report: dict[str, Any], database: ReportDatabase | None = None) -> None:
+def show_report(platform: TradingPlatform, report: dict[str, Any],
+                database: ReportDatabase | None = None) -> None:
     summary_cards(report)
     tabs = st.tabs(["Candidates", "Stocks in news", "Market & context", "Rejected",
                     "Complete report", "JSON"])
@@ -480,7 +492,7 @@ def show_report(report: dict[str, Any], database: ReportDatabase | None = None) 
             st.subheader("Candidate levels and approved option strikes")
             st.caption("This section includes both executable trades and watchlist candidates. "
                        "Only rows marked TRADE / Executable trade YES are actionable paper-trade plans.")
-            selected_stock_details(report, database)
+            selected_stock_details(platform, report, database)
     with tabs[1]:
         show_news(report)
     with tabs[2]:
@@ -521,7 +533,7 @@ def show_report(report: dict[str, Any], database: ReportDatabase | None = None) 
                     st.error("Analytical status: REJECTED. Marking this as TRADED records your "
                              "actual action and does not convert it into an approved recommendation.")
                     if database:
-                        start_recommended_trade_control(database, run_id, item)
+                        start_recommended_trade_control(platform, database, run_id, item)
                     for reason in item.get("reasons", []):
                         st.write(f"• {reason}")
         else:
@@ -816,7 +828,7 @@ def daily_report_page(platform: TradingPlatform, database: ReportDatabase) -> No
         st.info("A daily report is running in the background. Navigation will not stop it.")
     report = None if job_running else st.session_state.get("current_report")
     if report:
-        show_report(report, database)
+        show_report(platform, report, database)
 
 
 def analyze_page(platform: TradingPlatform) -> None:
@@ -838,7 +850,7 @@ def analyze_page(platform: TradingPlatform) -> None:
         st.json(result, expanded=True)
 
 
-def history_page(database: ReportDatabase) -> None:
+def history_page(platform: TradingPlatform, database: ReportDatabase) -> None:
     st.title("Report history")
     history = database.list_reports(100)
     if not history:
@@ -869,7 +881,7 @@ def history_page(database: ReportDatabase) -> None:
         report_id = labels[selected]
         report = database.get_report(report_id)
         if report:
-            show_report(report, database)
+            show_report(platform, report, database)
 
 
 def trade_tracker_page(platform: TradingPlatform, database: ReportDatabase) -> None:
@@ -1021,7 +1033,7 @@ def main() -> None:
     elif page == "Trade tracker":
         trade_tracker_page(platform, database)
     elif page == "History":
-        history_page(database)
+        history_page(platform, database)
     else:
         system_page(platform, database)
 

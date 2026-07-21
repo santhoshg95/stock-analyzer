@@ -903,26 +903,28 @@ class DailyTradingAssistant:
             breakout_confirmed=bool(analysis["breakout"].get("confirmed")),
             entry_confirmed=entry_confirmation.passed, direction=direction,
             ema20=analysis["analysis"].get("ema20"), atr=analysis["analysis"].get("atr"),
+            entry_zone_below_atr=self.platform.settings.entry_zone_below_atr,
+            entry_zone_above_atr=self.platform.settings.entry_zone_above_atr,
         )
         trade["entry_selection"] = entry_selection
         trade["selection_status"] = entry_selection["status"]
         trade["selection_reason"] = entry_selection["reason"]
         stability = trade["selection_stability"]
         active_position_block = trade["symbol"] in self.excluded_symbols
-        stability_block = not bool(stability.get("eligible", True))
+        stability_pending = not bool(stability.get("eligible", True))
         if active_position_block:
             trade["entry_selection"] = {**trade["entry_selection"], "status": "AVOID",
                                          "reason": "This stock already has an active tracked position."}
-        elif stability_block:
+        elif stability_pending:
             trade["entry_selection"] = {
-                **trade["entry_selection"], "status": "AVOID",
-                "reason": "Selection is new or unstable across recent daily reports; wait for persistence.",
+                **trade["entry_selection"], "status": "WAIT FOR CONFIRMATION",
+                "reason": "Candidate is new or not yet persistent; keep it on the watchlist until confirmed.",
             }
         trade["selection_status"] = trade["entry_selection"]["status"]
         trade["selection_reason"] = trade["entry_selection"]["reason"]
         if entry_selection["status"] != "BUY NOW":
             status_reasons.append(entry_selection["reason"])
-        if active_position_block or stability_block:
+        if active_position_block or stability_pending:
             status_reasons.append(trade["selection_reason"])
         news_complete = news["news_state"] in {"ANALYZED", "NO_RELEVANT_NEWS",
                                                 "NOT_REQUESTED_BY_POLICY"}
@@ -958,10 +960,11 @@ class DailyTradingAssistant:
             direction=direction,
             entry=entry_confirmation,
             readiness_status=("WAIT" if (not regime_rs_complete
-                                          or entry_selection["status"] != "BUY NOW")
+                                          or entry_selection["status"] != "BUY NOW"
+                                          or stability_pending)
                               else execution_state["status"]),
             eligible=bool(equity_eligible and regime_rs_passed),
-            hard_block=bool(event_assessment["hard_block"] or active_position_block or stability_block),
+            hard_block=bool(event_assessment["hard_block"] or active_position_block),
             critical_failure=bool(critical_failure),
             news_complete=news_complete or not self.platform.settings.news_analysis_required_for_execution,
             event_complete=event_complete,
@@ -1191,13 +1194,19 @@ class DailyTradingAssistant:
         for candidate in candidates:
             symbol = str(candidate["symbol"]).upper().removesuffix(".NS")
             appearances = sum(symbol in symbols for symbols in recent_runs)
-            enough_history = len(recent_runs) >= 1
+            required = min(
+                self.platform.settings.selection_stability_min_appearances,
+                len(recent_runs),
+            )
+            enough_history = len(recent_runs) >= self.platform.settings.selection_stability_min_appearances
             candidate["selection_stability"] = {
-                "status": ("STABLE" if appearances >= 1 else
-                           "NEW_NO_HISTORY" if not enough_history else "UNSTABLE"),
-                "eligible": not enough_history or appearances >= 1,
+                "status": ("NEW_NO_HISTORY" if not recent_runs else
+                           "STABLE" if appearances >= required else
+                           "BUILDING_HISTORY" if not enough_history else "UNSTABLE"),
+                "eligible": not enough_history or appearances >= required,
                 "appearances": appearances,
                 "runs_reviewed": len(recent_runs),
+                "required_appearances": required,
                 "score": round(100 * (appearances + 1) / (len(recent_runs) + 1), 2),
             }
         context_seconds = perf_counter() - context_started
