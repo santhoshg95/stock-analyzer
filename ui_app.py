@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 import os
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date, datetime, timedelta
@@ -49,7 +50,12 @@ class DailyReportJobs:
         job_id = uuid4().hex
 
         def generate_and_save() -> dict[str, Any]:
-            report = platform.daily_report(limit, minimum_score, option_month)
+            open_symbols = {trade["symbol"] for trade in database.list_actual_trades("OPEN")}
+            parameters = inspect.signature(platform.daily_report).parameters
+            report = (platform.daily_report(
+                limit, minimum_score, option_month, excluded_symbols=open_symbols
+            ) if "excluded_symbols" in parameters else
+                platform.daily_report(limit, minimum_score, option_month))
             report_id = database.save_report(report, platform.settings.market_data_source)
             return {"report": report, "report_id": report_id}
 
@@ -200,8 +206,14 @@ def candidate_rows(report: dict[str, Any], execution_marks: dict[str, str] | Non
     rows = []
     for trade in [*report.get("trades", []), *report.get("watchlist", [])]:
         event = trade.get("event_risk", {})
+        stability = trade.get("selection_stability") or {}
         rows.append({
             "Symbol": trade.get("symbol"), "Status": trade.get("status"),
+            "Entry status": trade.get("selection_status", "UNAVAILABLE"),
+            "Trigger price": (trade.get("entry_selection") or {}).get("trigger_price"),
+            "Selection reason": trade.get("selection_reason"),
+            "Selection stability": stability.get("status"),
+            "Recent appearances": stability.get("appearances"),
             "Executable trade": "YES" if trade.get("status") == "TRADE" else "NO",
             "Actually traded": execution_marks.get(str(trade.get("symbol")), "NOT_TRADED"),
             "Action": trade.get("final_action"), "Quality": trade.get("quality_grade"),
@@ -307,6 +319,16 @@ def selected_stock_details(report: dict[str, Any], database: ReportDatabase | No
         label = f"{trade.get('symbol')} — {trade.get('final_action')} — {trade.get('status')}"
         with st.expander(label):
             symbol = str(trade.get("symbol", ""))
+            selection = trade.get("entry_selection") or {}
+            selection_status = trade.get("selection_status") or selection.get("status")
+            if selection_status:
+                message = f"{selection_status}: {trade.get('selection_reason') or selection.get('reason', '')}"
+                if selection_status == "BUY NOW":
+                    st.success(message)
+                elif selection_status in {"WAIT FOR BREAKOUT", "WAIT FOR PULLBACK"}:
+                    st.info(message)
+                else:
+                    st.warning(message)
             if database:
                 start_recommended_trade_control(database, run_id, trade)
             else:
@@ -494,6 +516,8 @@ def show_report(report: dict[str, Any], database: ReportDatabase | None = None) 
             for item in rejected:
                 with st.expander(str(item.get("symbol", "UNKNOWN"))):
                     symbol = str(item.get("symbol", "UNKNOWN"))
+                    st.warning(f"{item.get('selection_status', 'AVOID')}: "
+                               f"{item.get('selection_reason', 'Final selection gates did not pass.')}")
                     st.error("Analytical status: REJECTED. Marking this as TRADED records your "
                              "actual action and does not convert it into an approved recommendation.")
                     if database:
