@@ -369,6 +369,12 @@ def render_health_strip(platform: TradingPlatform, database: ReportDatabase,
     st.markdown(f'<div class="health-strip">{labels}</div>', unsafe_allow_html=True)
 
 
+def request_navigation(page: str) -> None:
+    """Defer page changes until before the sidebar radio is created next run."""
+    st.session_state["pending_nav_page"] = str(page)
+    st.rerun()
+
+
 def render_metric_cards(metrics: list[tuple[str, Any]], per_row: int = 3) -> None:
     """Render metrics in bounded rows so values remain readable at common widths."""
     per_row = max(1, min(int(per_row), 3))
@@ -1077,9 +1083,9 @@ def show_report(platform: TradingPlatform, report: dict[str, Any],
         if len(all_candidates) > 3:
             st.caption(f"Showing the top 3 of {len(all_candidates)} candidates. Use Opportunities "
                        "for the complete decision workspace.")
-        if st.button("Open all opportunities", key=f"report-opportunities-{report.get('run_id')}"):
-            st.session_state["nav_page"] = "Opportunities"
-            st.rerun()
+        if all_candidates and st.button(
+                "Open all opportunities", key=f"report-opportunities-{report.get('run_id')}"):
+            request_navigation("Opportunities")
         grouped = rejection_summary(report.get("rejected", []))
         if grouped:
             st.subheader("Important blockers")
@@ -2259,6 +2265,10 @@ def main() -> None:
     preferences = database.get_preferences()
     apply_theme(preferences)
     sync_feature_jobs()
+    pending_page = st.session_state.pop("pending_nav_page", None)
+    if pending_page:
+        # Apply navigation requests before the keyed sidebar radio is created.
+        st.session_state["nav_page"] = pending_page
     with st.sidebar:
         st.markdown("## 📈 Stock Analyzer")
         st.caption("Research & paper-trading desk")
@@ -2281,11 +2291,9 @@ def main() -> None:
                 target = instruction.split(maxsplit=1)[1].strip().upper()
                 start_feature_job("analysis", lambda: platform.analyze(target))
                 st.session_state["analysis_symbol"] = target
-                st.session_state["nav_page"] = "Analyze stock"
-                st.rerun()
+                request_navigation("Analyze stock")
             elif page_match:
-                st.session_state["nav_page"] = page_match
-                st.rerun()
+                request_navigation(page_match)
             else:
                 st.warning("Try “Analyze RELIANCE” or “open History”.")
         if "nav_page" not in st.session_state:
