@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from typing import Any
 
@@ -26,6 +27,7 @@ class GeminiAnalyst:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         self.model = model or os.getenv("GEMINI_ANALYST_MODEL", "gemini-3.5-flash")
         self.fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite")
+        self.web_search = os.getenv("GEMINI_WEB_SEARCH", "always").strip().lower()
         self.timeout_seconds = timeout_seconds
 
     @property
@@ -40,6 +42,31 @@ class GeminiAnalyst:
         parts = candidates[0].get("content", {}).get("parts", [])
         return "\n".join(str(part["text"]) for part in parts if part.get("text")).strip()
 
+    @staticmethod
+    def _needs_current_search(question: str) -> bool:
+        words = set(re.findall(r"[a-z]+", str(question).lower()))
+        return bool(words.intersection({
+            "news", "today", "latest", "current", "recent", "headline", "headlines",
+            "announcement", "announcements", "breaking", "happened", "update", "updates",
+        }))
+
+    @staticmethod
+    def _grounding_sources(payload: dict[str, Any]) -> list[dict[str, str]]:
+        candidates = payload.get("candidates") or []
+        if not candidates:
+            return []
+        chunks = candidates[0].get("groundingMetadata", {}).get("groundingChunks", [])
+        sources, seen = [], set()
+        for chunk in chunks:
+            web = chunk.get("web", {}) if isinstance(chunk, dict) else {}
+            uri, title = str(web.get("uri") or ""), str(web.get("title") or "Source")
+            if uri.startswith(("https://", "http://")) and uri not in seen:
+                seen.add(uri)
+                sources.append({"title": title, "url": uri})
+            if len(sources) == 5:
+                break
+        return sources
+
     def answer(self, question: str, context: dict[str, Any],
                history: list[dict[str, str]] | None = None) -> dict[str, Any]:
         if not self.configured:
@@ -51,7 +78,9 @@ class GeminiAnalyst:
             "project evidence. The analytical engine is the source of truth. Explain decisions and "
             "probabilities in plain language, cite report IDs and project file paths when present, "
             "distinguish facts from inference, and say when evidence is unavailable. Never claim a "
-            "guaranteed return, place an order, reveal credentials, or invent live data. Lead with the answer."
+            "guaranteed return, place an order, reveal credentials, or invent live data. For current-news "
+            "questions only, Google Search results supplied by the search tool are valid additional evidence; "
+            "clearly separate them from saved-report facts and cite their sources. Lead with the answer."
         )
         contents = []
         for message in (history or [])[-8:]:
@@ -69,6 +98,10 @@ class GeminiAnalyst:
             "contents": contents,
             "generationConfig": {"maxOutputTokens": 2048},
         }
+        search_enabled = self.web_search != "off"
+        search_requested = self.web_search == "always" or self._needs_current_search(question)
+        if search_enabled and search_requested:
+            request_body["tools"] = [{"google_search": {}}]
         models = [self.model]
         if self.fallback_model and self.fallback_model != self.model:
             models.append(self.fallback_model)
@@ -132,4 +165,10 @@ class GeminiAnalyst:
             if block_reason:
                 raise RuntimeError(f"Gemini blocked this request: {block_reason}")
             raise RuntimeError("Gemini returned no assistant message.")
-        return {"text": text, "model": used_model, "response_id": None}
+        sources = self._grounding_sources(payload) if search_requested else []
+        if sources:
+            links = "\n".join(f"- [{source['title']}]({source['url']})" for source in sources)
+            text = f"{text}\n\nSources:\n{links}"
+        return {"text": text, "model": used_model, "response_id": None,
+                "search_enabled": search_enabled,
+                "search_grounded": bool(sources), "sources": sources}

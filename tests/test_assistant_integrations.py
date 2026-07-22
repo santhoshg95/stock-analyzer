@@ -44,6 +44,13 @@ class AssistantIntegrationTests(unittest.TestCase):
         self.assertEqual(result["adverse_move_risk"][
             "probability_adverse_barrier_before_target"], 18)
 
+    def test_report_wide_context_includes_adverse_probability(self):
+        selected = self.tools.selected_stocks(self.report_id)
+        adverse = selected["items"][0]["adverse_move_risk"]
+        self.assertTrue(adverse["available"])
+        self.assertEqual(adverse["adverse_barrier_percent"], 3)
+        self.assertEqual(adverse["probability_adverse_barrier_before_target"], 18)
+
     def test_project_search_and_read_exclude_secrets(self):
         results = self.tools.search_project("adverse probability")["results"]
         self.assertEqual(results[0]["path"], "src/risk.py")
@@ -83,11 +90,18 @@ class AssistantIntegrationTests(unittest.TestCase):
         ]}}]}
         self.assertEqual(GeminiAnalyst._output_text(payload), "Grounded\n answer")
 
+    def test_gemini_search_is_limited_to_current_information_questions(self):
+        self.assertTrue(GeminiAnalyst._needs_current_search(
+            "What is the latest JSWENERGY news today?"))
+        self.assertFalse(GeminiAnalyst._needs_current_search(
+            "Why did JSWENERGY fail the risk gate?"))
+
     def test_gemini_uses_current_stable_default_model(self):
         with patch.dict("os.environ", {}, clear=True):
             analyst = GeminiAnalyst(api_key="test-key")
             self.assertEqual(analyst.model, "gemini-3.5-flash")
             self.assertEqual(analyst.fallback_model, "gemini-3.1-flash-lite")
+            self.assertEqual(analyst.web_search, "always")
 
     @patch("src.assistant.gemini_assistant.requests.post")
     def test_gemini_answer_uses_grounded_context(self, post):
@@ -102,6 +116,7 @@ class AssistantIntegrationTests(unittest.TestCase):
         self.assertIn("SBIN", post.call_args.kwargs["json"]["contents"][-1]["parts"][0]["text"])
         self.assertEqual(post.call_args.kwargs["headers"]["x-goog-api-key"], "test-key")
         self.assertNotIn("temperature", post.call_args.kwargs["json"]["generationConfig"])
+        self.assertEqual(post.call_args.kwargs["json"]["tools"], [{"google_search": {}}])
 
     @patch("src.assistant.gemini_assistant.time.sleep")
     @patch("src.assistant.gemini_assistant.requests.post")
@@ -118,6 +133,25 @@ class AssistantIntegrationTests(unittest.TestCase):
         self.assertEqual(result["model"], "gemini-3.1-flash-lite")
         self.assertIn("gemini-3.1-flash-lite", post.call_args.args[0])
         self.assertEqual(sleep.call_count, 1)
+
+    @patch("src.assistant.gemini_assistant.requests.post")
+    def test_gemini_current_news_uses_search_and_returns_sources(self, post):
+        response = Mock(ok=True)
+        response.json.return_value = {
+            "candidates": [{
+                "content": {"parts": [{"text": "Current company news."}]},
+                "groundingMetadata": {"groundingChunks": [
+                    {"web": {"title": "Exchange filing", "uri": "https://example.com/filing"}},
+                ]},
+            }],
+        }
+        post.return_value = response
+        result = GeminiAnalyst(api_key="test-key", model="test-model").answer(
+            "What is the news today?", {"symbol": "JSWENERGY"})
+        self.assertEqual(post.call_args.kwargs["json"]["tools"], [{"google_search": {}}])
+        self.assertTrue(result["search_grounded"])
+        self.assertEqual(result["sources"][0]["title"], "Exchange filing")
+        self.assertIn("[Exchange filing](https://example.com/filing)", result["text"])
 
     @patch("src.assistant.gemini_assistant.requests.post")
     def test_invalid_gemini_key_becomes_login_request(self, post):
