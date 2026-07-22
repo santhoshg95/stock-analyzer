@@ -83,6 +83,12 @@ class AssistantIntegrationTests(unittest.TestCase):
         ]}}]}
         self.assertEqual(GeminiAnalyst._output_text(payload), "Grounded\n answer")
 
+    def test_gemini_uses_current_stable_default_model(self):
+        with patch.dict("os.environ", {}, clear=True):
+            analyst = GeminiAnalyst(api_key="test-key")
+            self.assertEqual(analyst.model, "gemini-3.5-flash")
+            self.assertEqual(analyst.fallback_model, "gemini-3.1-flash-lite")
+
     @patch("src.assistant.gemini_assistant.requests.post")
     def test_gemini_answer_uses_grounded_context(self, post):
         response = Mock(ok=True)
@@ -95,6 +101,23 @@ class AssistantIntegrationTests(unittest.TestCase):
         self.assertEqual(result["text"], "Gemini answer")
         self.assertIn("SBIN", post.call_args.kwargs["json"]["contents"][-1]["parts"][0]["text"])
         self.assertEqual(post.call_args.kwargs["headers"]["x-goog-api-key"], "test-key")
+        self.assertNotIn("temperature", post.call_args.kwargs["json"]["generationConfig"])
+
+    @patch("src.assistant.gemini_assistant.time.sleep")
+    @patch("src.assistant.gemini_assistant.requests.post")
+    def test_gemini_retries_then_uses_fallback_during_high_demand(self, post, sleep):
+        busy = Mock(ok=False, status_code=503, text="busy", headers={})
+        busy.json.return_value = {"error": {"message": "high demand", "status": "UNAVAILABLE"}}
+        success = Mock(ok=True)
+        success.json.return_value = {
+            "candidates": [{"content": {"parts": [{"text": "Fallback answer"}]}}],
+        }
+        post.side_effect = [busy, busy, success]
+        result = GeminiAnalyst(api_key="test-key").answer("Why?", {"symbol": "SBIN"})
+        self.assertEqual(result["text"], "Fallback answer")
+        self.assertEqual(result["model"], "gemini-3.1-flash-lite")
+        self.assertIn("gemini-3.1-flash-lite", post.call_args.args[0])
+        self.assertEqual(sleep.call_count, 1)
 
     @patch("src.assistant.gemini_assistant.requests.post")
     def test_invalid_gemini_key_becomes_login_request(self, post):
@@ -118,6 +141,34 @@ class AssistantIntegrationTests(unittest.TestCase):
         service = CodexService(self.root, executable="definitely-not-installed-codex")
         with self.assertRaises(PermissionError):
             service.run("change code", "IMPLEMENT", confirmed=False)
+
+    def test_codex_extracts_current_nested_agent_message(self):
+        event = {"type": "item.completed", "item": {
+            "id": "item_0", "type": "agent_message", "text": "Grounded explanation",
+        }}
+        self.assertEqual(CodexService._event_text(event), "Grounded explanation")
+
+    def test_codex_ignores_non_message_event_items(self):
+        event = {"type": "item.completed", "item": {
+            "id": "item_0", "type": "command_execution", "text": "secret shell output",
+        }}
+        self.assertEqual(CodexService._event_text(event), "")
+
+    @patch("src.assistant.codex_service.subprocess.run")
+    @patch("src.assistant.codex_service.shutil.which", return_value="/usr/bin/codex")
+    def test_codex_run_prefers_agent_answer_over_stderr_warnings(self, which, run):
+        run.return_value = Mock(
+            stdout=(
+                '{"type":"thread.started","thread_id":"thread-1"}\n'
+                '{"type":"item.completed","item":{"type":"agent_message",'
+                '"text":"The selected stock passed its risk gates."}}\n'
+            ),
+            stderr="WARN shell snapshot unavailable",
+            returncode=0,
+        )
+        result = CodexService(self.root).run("Explain selection", "EXPLAIN")
+        self.assertEqual(result.output, "The selected stock passed its risk gates.")
+        self.assertEqual(result.return_code, 0)
 
     @patch("src.assistant.local_assistant.requests.post")
     def test_ollama_answer_uses_grounded_context(self, post):

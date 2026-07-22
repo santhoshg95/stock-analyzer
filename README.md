@@ -154,7 +154,8 @@ responses may be used by Google to improve its products, so do not send confiden
 
 ```env
 GEMINI_API_KEY=your_google_ai_studio_key
-GEMINI_ANALYST_MODEL=gemini-2.5-flash-lite
+GEMINI_ANALYST_MODEL=gemini-3.5-flash
+GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite
 ```
 
 The key remains server-side. Assistant context excludes `.env`, credentials, `.git`, caches,
