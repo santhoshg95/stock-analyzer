@@ -805,7 +805,8 @@ def execution_mark_control(database: ReportDatabase | None, run_id: str, symbol:
 
 def start_recommended_trade_control(platform: TradingPlatform, database: ReportDatabase,
                                     run_id: str, trade: dict[str, Any],
-                                    key_prefix: str = "recommendation") -> None:
+                                    key_prefix: str = "recommendation",
+                                    save_report_mark: bool = True) -> None:
     """Record the user's actual action while preserving the analytical recommendation."""
     symbol = str(trade.get("symbol", "")).upper().removesuffix(".NS")
     tracked = database.get_candidate_trade(run_id, symbol)
@@ -836,7 +837,9 @@ def start_recommended_trade_control(platform: TradingPlatform, database: ReportD
         columns = st.columns(4)
         quantity = columns[0].number_input("Quantity", min_value=1, value=1, step=1,
                                            key=f"qty-{widget_scope}")
-        side = columns[1].selectbox("Actual side", ("BUY", "SELL"), key=f"side-{widget_scope}")
+        default_side = 1 if analytical_action in {"SELL", "SHORT", "BEARISH"} else 0
+        side = columns[1].selectbox("Actual side", ("BUY", "SELL"), index=default_side,
+                                    key=f"side-{widget_scope}")
         entry_date = columns[2].date_input("Trade date", value=date.today(),
                                            key=f"entry-date-{widget_scope}")
         hold_until = columns[3].date_input("Hold until (review date)", value=suggested_hold,
@@ -871,7 +874,8 @@ def start_recommended_trade_control(platform: TradingPlatform, database: ReportD
                 "notes": (f"Created from report candidate; original status={analytical_status}; "
                           f"original action={analytical_action}; discretionary_override={override_required}"),
             })
-            database.set_candidate_execution(run_id, symbol, True)
+            if save_report_mark:
+                database.set_candidate_execution(run_id, symbol, True)
             st.success(f"{symbol} is now an active tracked trade.")
             st.rerun()
         except ValueError as exc:
@@ -1392,7 +1396,7 @@ def positions_page(platform: TradingPlatform, database: ReportDatabase) -> None:
     trade_tracker_page(platform, database)
 
 
-def bearish_options_page(platform: TradingPlatform) -> None:
+def bearish_options_page(platform: TradingPlatform, database: ReportDatabase) -> None:
     st.title("Bearish option opportunities")
     st.caption("Shows up to two validated Long Put or Bear Put Spread structures; it never forces a trade.")
     with st.form("bearish-options-form"):
@@ -1434,6 +1438,31 @@ def bearish_options_page(platform: TradingPlatform) -> None:
             st.write(f"Maximum loss: ₹{value(trade.get('maximum_loss'))}")
             st.write(f"Maximum profit: {value(trade.get('maximum_profit'), 'UNLIMITED')}")
             st.write(f"Breakeven: ₹{value(trade.get('breakeven'))}")
+            st.divider()
+            st.markdown("**Record a bearish stock trade**")
+            st.caption("This records a short-equity paper position. SELL profits when the stock "
+                       "falls and loses when it rises. It does not place a broker order or record "
+                       "the option legs themselves.")
+            bearish_candidate = {
+                **candidate, "status": "TRADE", "final_action": "SELL",
+                "strategy": "BEARISH STOCK / SHORT",
+                "levels": {
+                    **levels,
+                    # For a short, the protective stop belongs above entry and
+                    # the profit target belongs below it. Preserve scan levels
+                    # when they already have that orientation.
+                    "stop_loss": (levels.get("stop_loss") if levels.get("stop_loss") and
+                                  float(levels["stop_loss"]) > float(candidate["current_price"])
+                                  else levels.get("resistance")),
+                    "target_1": (levels.get("target_1") if levels.get("target_1") and
+                                 float(levels["target_1"]) < float(candidate["current_price"])
+                                 else levels.get("support")),
+                },
+            }
+            scan_id = f"bearish-{st.session_state.get('bearish_job_id', 'current')}"
+            start_recommended_trade_control(
+                platform, database, scan_id, bearish_candidate,
+                key_prefix="bearish-stock", save_report_mark=False)
     if not result.get("candidates"):
         st.json(result.get("rejection_counts", {}), expanded=True)
 
@@ -2324,7 +2353,7 @@ def main() -> None:
     elif page == "Analyze":
         analyze_page(platform)
     elif page == "Bearish options":
-        bearish_options_page(platform)
+        bearish_options_page(platform, database)
     elif page == "History":
         history_page(platform, database)
     elif page == "Watchlists":
