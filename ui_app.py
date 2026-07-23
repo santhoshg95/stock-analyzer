@@ -844,6 +844,117 @@ def candidate_history_rows(reports: list[dict[str, Any]], symbol: str) -> list[d
     return rows
 
 
+def price_action_summary(result: dict[str, Any]) -> dict[str, Any]:
+    """Project technical setup data into one decision-oriented UI record."""
+    entries = result.get("entries") or []
+    entry = max(entries, key=lambda item: float(item.get("confidence") or 0), default={})
+    score = result.get("score") or {}
+    retest, breakout = result.get("retest") or {}, result.get("breakout") or {}
+    patterns = result.get("patterns") or []
+    setup = (entry.get("setup") or (patterns[0].get("pattern") if patterns else None)
+             or ((result.get("reversals") or [{}])[-1].get("setup")) or "No active setup")
+    return {
+        "direction": result.get("direction") or "NEUTRAL",
+        "category": score.get("category") or "REJECT",
+        "setup": setup,
+        "entry_mode": entry.get("entry_mode") or "NOT_READY",
+        "entry": entry.get("entry_price"),
+        "stop": entry.get("stop_loss"),
+        "targets": entry.get("targets") or [],
+        "risk_reward": entry.get("risk_reward") or [],
+        "confidence": entry.get("confidence", score.get("score", 0)),
+        "breakout": breakout.get("quality", "NONE"),
+        "retest": retest.get("retest_quality", "NONE"),
+        "warning": next(iter(result.get("rejection_reasons") or []), None),
+    }
+
+
+def setup_lifecycle_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return Pattern → Breakout → Retest → Confirmation → Entry states."""
+    pattern = (result.get("patterns") or [{}])[0]
+    breakout, retest = result.get("breakout") or {}, result.get("retest") or {}
+    entry = (result.get("entries") or [{}])[0]
+    failed_retest = retest.get("retest_quality") == "FAILED"
+    rows = [
+        ("Pattern", bool(pattern), False, (pattern.get("candle_indexes") or [None])[-1],
+         pattern.get("pattern")),
+        ("Breakout", bool(breakout), breakout.get("quality") == "FALSE_BREAKOUT",
+         breakout.get("breakout_candle"), breakout.get("quality")),
+        ("Retest", bool(retest), failed_retest, retest.get("retest_timestamp"),
+         retest.get("retest_type")),
+        ("Confirmation", bool(retest.get("confirmation_timestamp")), failed_retest,
+         retest.get("confirmation_timestamp"), retest.get("retest_quality")),
+        ("Entry", bool(entry), False, entry.get("signal_timestamp"), entry.get("entry_mode")),
+    ]
+    output = []
+    blocked = False
+    for stage, complete, failed, timestamp, detail in rows:
+        status = "FAILED" if failed else "COMPLETE" if complete else "BLOCKED" if blocked else "PENDING"
+        blocked = blocked or failed
+        output.append({"Stage": stage, "Status": status, "Time": display_date(timestamp),
+                       "Detail": str(detail or "Waiting")})
+    return output
+
+
+def setup_score_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
+    score = result.get("score") or {}
+    weights = score.get("weights") or {}
+    return [{"Component": name.replace("_", " ").title(), "Score": round(float(value or 0), 1),
+             "Weight": round(float(weights.get(name, 0)) * 100, 1)}
+            for name, value in (score.get("component_scores") or {}).items()]
+
+
+def entry_alternative_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{
+        "Mode": str(entry.get("entry_mode", "")).replace("_", " ").title(),
+        "Entry": entry.get("entry_price"), "Stop": entry.get("stop_loss"),
+        "Target 1": (entry.get("targets") or [None])[0],
+        "Best R:R": max(entry.get("risk_reward") or [0]),
+        "Confidence": entry.get("confidence"), "Expires": entry.get("expiry_maximum_waiting_bars"),
+    } for entry in sorted(result.get("entries") or [],
+                          key=lambda item: float(item.get("confidence") or 0), reverse=True)]
+
+
+def grouped_setup_rejections(result: dict[str, Any]) -> list[dict[str, Any]]:
+    groups = {
+        "Setup invalid": ("INVALID", "FALSE", "PATTERN", "STRUCTURE"),
+        "Entry not ready": ("WAIT", "CONFIRM", "RETEST", "EXPIR"),
+        "Risk/reward": ("RISK", "REWARD", "STOP", "TARGET"),
+        "Opposing zone": ("ZONE", "RESISTANCE", "SUPPORT"),
+        "Volume/volatility": ("VOLUME", "VOLAT", "ATR", "EXTEND"),
+        "Option safety": ("STRIKE", "OPTION", "PREMIUM"),
+    }
+    reasons = list(result.get("rejection_reasons") or [])
+    for event in result.get("breakout_events") or []:
+        reasons.extend(event.get("reason_codes") or [])
+    rows = []
+    for reason in dict.fromkeys(str(item) for item in reasons if item):
+        category = next((name for name, terms in groups.items()
+                         if any(term in reason.upper() for term in terms)), "Other")
+        rows.append({"Category": category, "Reason code": reason,
+                     "Explanation": reason.replace("_", " ").title()})
+    return sorted(rows, key=lambda item: (item["Category"], item["Reason code"]))
+
+
+def option_safety_view(result: dict[str, Any]) -> dict[str, Any]:
+    option = (result.get("option_selling") or result.get("technical_validation")
+              or ((result.get("entry_validation") or {}).get("technical_validation")) or {})
+    return {
+        "available": bool(option),
+        "spot": option.get("spot_price"), "strike": option.get("suggested_strike"),
+        "invalidation": option.get("technical_invalidation"),
+        "breakeven": option.get("breakeven"),
+        "support": option.get("nearest_support"), "resistance": option.get("nearest_resistance"),
+        "support_strength": option.get("support_strength"),
+        "resistance_strength": option.get("resistance_strength"),
+        "breakout": option.get("breakout_status", "NONE"),
+        "retest": option.get("retest_status", "NONE"),
+        "strike_safety": option.get("technical_strike_safety"),
+        "invalidation_distance": option.get("distance_strike_to_invalidation"),
+        "warnings": option.get("warnings") or [],
+    }
+
+
 def portfolio_snapshot(trades: list[dict[str, Any]], prices: dict[str, float | None]) -> dict[str, Any]:
     """Calculate live portfolio totals without hiding positions with missing quotes."""
     deployed = risk = unrealized = 0.0
@@ -1033,6 +1144,8 @@ def price_figure(frame: pd.DataFrame, symbol: str, levels: dict[str, Any] | None
     data = frame.copy()
     data.columns = [str(column).title() for column in data.columns]
     x = data.index
+    visibility = (levels or {}).get("overlay_visibility") or {}
+    enabled = lambda name: visibility.get(name, True)
     figure = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=.025,
                            row_heights=[.64, .18, .18])
     figure.add_trace(go.Candlestick(x=x, open=data["Open"], high=data["High"], low=data["Low"],
@@ -1047,38 +1160,46 @@ def price_figure(frame: pd.DataFrame, symbol: str, levels: dict[str, Any] | None
                               ("Target", "target_1", "#34d399"), ("Support", "support", "#a78bfa"),
                               ("Resistance", "resistance", "#fbbf24")):
         price = (levels or {}).get(key)
+        if key in ("entry", "stop_loss", "target_1") and not enabled("trade_levels"):
+            continue
+        if key in ("support", "resistance") and not enabled("zones"):
+            continue
         if price is not None:
             figure.add_hline(y=float(price), line_dash="dot", line_color=color,
                              annotation_text=label, row=1, col=1)
     if (levels or {}).get("show_price_action_overlays", True):
-        for zone in (levels or {}).get("zones", []):
+        for zone in ((levels or {}).get("zones", []) if enabled("zones") else []):
             color = "#34d399" if zone.get("type") == "SUPPORT" else "#fb7185"
             figure.add_hrect(y0=float(zone["lower"]), y1=float(zone["upper"]),
                              fillcolor=color, opacity=.10, line_width=0, row=1, col=1)
-        swings = (levels or {}).get("swings", [])
+        swings = (levels or {}).get("swings", [])[-12:] if enabled("swings") else []
         if swings:
             figure.add_trace(go.Scatter(
                 x=[s["timestamp"] for s in swings], y=[s["price"] for s in swings],
                 mode="markers+text", text=[s.get("label", s.get("type", "")) for s in swings],
                 textposition="top center", marker={"size": 8, "color": "#fbbf24"},
                 name="Confirmed swings"), row=1, col=1)
-        for name, event, color in (
+        event_overlays = (
                 ("Breakout", (levels or {}).get("breakout"), "#22d3ee"),
                 ("Retest", (levels or {}).get("retest"), "#a78bfa"),
-                ("Confirmation", (levels or {}).get("confirmation"), "#34d399")):
+                ("Confirmation", (levels or {}).get("confirmation"), "#34d399"))
+        for name, event, color in event_overlays:
+            if not enabled(name.lower()):
+                continue
             if event and event.get("timestamp") is not None and event.get("price") is not None:
                 figure.add_trace(go.Scatter(
                     x=[event["timestamp"]], y=[event["price"]], mode="markers+text",
                     text=[name], textposition="bottom center",
                     marker={"size": 11, "color": color, "symbol": "diamond"}, name=name), row=1, col=1)
-        pattern = (levels or {}).get("pattern")
+        pattern = (levels or {}).get("pattern") if enabled("patterns") else None
         if pattern:
             figure.add_trace(go.Scatter(
                 x=[pattern.get("timestamp")], y=[pattern.get("price")],
                 mode="markers+text", text=[pattern.get("name", "Pattern")],
                 textposition="top center", marker={"size": 10, "color": "#f472b6", "symbol": "star"},
                 name="Pattern"), row=1, col=1)
-        for index, target in enumerate((levels or {}).get("price_action_targets", []), 1):
+        for index, target in enumerate(
+                (levels or {}).get("price_action_targets", []) if enabled("trade_levels") else [], 1):
             figure.add_hline(y=float(target), line_dash="dash", line_color="#34d399",
                              opacity=.55, annotation_text=f"PA target {index}", row=1, col=1)
     if show_volume and "Volume" in data:
@@ -1115,10 +1236,23 @@ def render_price_chart(platform: TradingPlatform, symbol: str,
         compare_index = controls[4].toggle("vs Nifty", value=False, key=f"chart-index-{symbol}")
         show_price_action = controls[5].toggle("Price action", value=True,
                                                key=f"chart-price-action-{symbol}")
+        overlay_visibility = {}
+        if show_price_action:
+            with st.expander("Chart overlays", expanded=False):
+                overlay_columns = st.columns(4)
+                overlay_options = (
+                    ("zones", "Zones"), ("swings", "Structure"), ("patterns", "Patterns"),
+                    ("breakout", "Breakouts"), ("retest", "Retests"),
+                    ("confirmation", "Confirmations"), ("trade_levels", "Entry / stop / targets"),
+                )
+                for index, (name, label) in enumerate(overlay_options):
+                    overlay_visibility[name] = overlay_columns[index % 4].toggle(
+                        label, value=True, key=f"chart-overlay-{name}-{symbol}")
         length = {"3M": 65, "6M": 130, "1Y": 260, "ALL": len(frame)}[period]
         visible = frame.tail(length)
         chart_levels = dict(levels or {})
         chart_levels["show_price_action_overlays"] = show_price_action
+        chart_levels["overlay_visibility"] = overlay_visibility
         st.plotly_chart(price_figure(visible, symbol, chart_levels, averages, show_volume, show_rsi), width="stretch",
                         config={"displaylogo": False, "scrollZoom": True,
                                 "toImageButtonOptions": {"filename": f"{symbol}-chart", "scale": 2}})
@@ -2168,6 +2302,153 @@ def analyze_page(platform: TradingPlatform) -> None:
         render_analysis_workspace(platform, result)
 
 
+def render_price_action_workspace(price_action: dict[str, Any],
+                                  full_result: dict[str, Any]) -> None:
+    """Render current setup first; keep implementation details secondary."""
+    summary = price_action_summary(price_action)
+    st.subheader("Setup summary")
+    st.markdown("".join(badge(value) for value in (
+        summary["direction"], summary["category"], summary["entry_mode"])),
+        unsafe_allow_html=True)
+    render_metric_cards([
+        ("Setup", summary["setup"]), ("Confidence", f"{number(summary['confidence'], 0)}%"),
+        ("Entry", money(summary["entry"])), ("Stop", money(summary["stop"])),
+        ("Best R:R", number(max(summary["risk_reward"] or [0]), 2)),
+        ("Breakout / retest", f"{summary['breakout']} / {summary['retest']}"),
+    ], per_row=3)
+    targets = summary["targets"]
+    if targets:
+        st.caption("Targets: " + " · ".join(money(target) for target in targets))
+    if summary["warning"]:
+        st.warning(str(summary["warning"]).replace("_", " ").title())
+
+    lifecycle, confidence = st.columns([1, 1])
+    with lifecycle.container(border=True):
+        st.subheader("Setup lifecycle")
+        st.caption("The entry becomes actionable only after its required stages complete.")
+        st.dataframe(pd.DataFrame(setup_lifecycle_rows(price_action)),
+                     width="stretch", hide_index=True)
+    with confidence.container(border=True):
+        st.subheader("Confidence breakdown")
+        rows = setup_score_rows(price_action)
+        if rows:
+            score_frame = pd.DataFrame(rows).sort_values("Score")
+            chart = go.Figure(go.Bar(
+                x=score_frame["Score"], y=score_frame["Component"], orientation="h",
+                marker_color=["#34d399" if score >= 70 else "#fbbf24" if score >= 45 else "#fb7185"
+                              for score in score_frame["Score"]],
+                customdata=score_frame[["Weight"]],
+                hovertemplate="%{y}: %{x:.1f}/100<br>Weight: %{customdata[0]:.1f}%<extra></extra>",
+            ))
+            chart.update_layout(template="plotly_dark", height=max(310, len(rows) * 28),
+                                margin={"l": 10, "r": 10, "t": 10, "b": 25},
+                                xaxis={"range": [0, 100], "title": "Score"}, showlegend=False)
+            st.plotly_chart(chart, width="stretch", config={"displaylogo": False})
+        else:
+            st.info("No component score is available.")
+
+    st.subheader("Entry alternatives")
+    alternatives = entry_alternative_rows(price_action)
+    if alternatives:
+        st.dataframe(pd.DataFrame(alternatives), width="stretch", hide_index=True,
+                     column_config={
+                         "Entry": st.column_config.NumberColumn(format="₹%.2f"),
+                         "Stop": st.column_config.NumberColumn(format="₹%.2f"),
+                         "Target 1": st.column_config.NumberColumn(format="₹%.2f"),
+                         "Best R:R": st.column_config.NumberColumn(format="%.2f"),
+                         "Confidence": st.column_config.ProgressColumn(min_value=0, max_value=100),
+                     })
+    else:
+        st.info("No entry passes the current stop-distance, opposing-zone, and risk/reward gates.")
+
+    structure_col, zone_col = st.columns(2)
+    with structure_col.container(border=True):
+        st.subheader("Active market structure")
+        structure = price_action.get("market_structure") or {}
+        render_metric_cards([
+            ("State", structure.get("structure", "RANGE")),
+            ("Latest event", (structure.get("latest_event") or {}).get("event_type", "—")),
+        ], per_row=2)
+        events = [event for event in structure.get("events", [])
+                  if event.get("event_type") in ("HH", "HL", "LH", "LL", "BOS", "CHOCH",
+                                                 "FAILED_HIGHER_HIGH", "FAILED_LOWER_LOW")][-12:]
+        if events:
+            st.dataframe(pd.DataFrame([{
+                "Event": event["event_type"], "Time": display_date(event.get("confirmation_timestamp")),
+                "Price": event.get("price"), "Confidence": event.get("confidence"),
+            } for event in events]), width="stretch", hide_index=True)
+    with zone_col.container(border=True):
+        st.subheader("Nearest zones")
+        midpoint = float(summary["entry"] or 0)
+        zones = sorted(price_action.get("zones") or [],
+                       key=lambda zone: abs(float(zone.get("midpoint") or 0) - midpoint))[:6]
+        if zones:
+            st.dataframe(pd.DataFrame([{
+                "Type": zone.get("type"), "Range": f"{money(zone.get('lower'))} – {money(zone.get('upper'))}",
+                "Strength": zone.get("classification"), "Score": zone.get("strength_score"),
+                "Touches": zone.get("touches"), "Retests": zone.get("successful_retest_count"),
+            } for zone in zones]), width="stretch", hide_index=True)
+        else:
+            st.info("No confirmed support/resistance zone is available.")
+
+    rejection_rows = grouped_setup_rejections(price_action)
+    with st.expander(f"Rejection reasons ({len(rejection_rows)})",
+                     expanded=bool(rejection_rows)):
+        if rejection_rows:
+            st.dataframe(pd.DataFrame(rejection_rows), width="stretch", hide_index=True)
+        else:
+            st.success("No active technical rejection reason.")
+
+    option = option_safety_view({
+        **price_action,
+        "option_selling": (full_result.get("option_selling")
+                           or (full_result.get("option_strategy") or {}).get("technical_validation")),
+        "entry_validation": full_result.get("entry_validation"),
+    })
+    with st.expander("Option-selling safety", expanded=option["available"]):
+        if option["available"]:
+            render_metric_cards([
+                ("Nearest support", money(option["support"])),
+                ("Nearest resistance", money(option["resistance"])),
+                ("Strike safety", number(option["strike_safety"], 2)),
+                ("Breakout", option["breakout"]), ("Retest", option["retest"]),
+                ("Invalidation distance", number(option["invalidation_distance"], 2)),
+            ], per_row=3)
+            for warning in option["warnings"]:
+                st.warning(str(warning).replace("_", " ").title())
+            points = [(name, option.get(key), color) for name, key, color in (
+                ("Support", "support", "#34d399"), ("Invalidation", "invalidation", "#fb7185"),
+                ("Strike", "strike", "#fbbf24"), ("Breakeven", "breakeven", "#a78bfa"),
+                ("Spot", "spot", "#60a5fa"), ("Resistance", "resistance", "#fb7185"))
+                      if option.get(key) is not None]
+            if points:
+                safety_chart = go.Figure()
+                safety_chart.add_trace(go.Scatter(
+                    x=[point[1] for point in points], y=["Technical map"] * len(points),
+                    mode="markers+text", text=[point[0] for point in points],
+                    textposition="top center",
+                    marker={"size": 14, "color": [point[2] for point in points]},
+                    hovertemplate="%{text}: ₹%{x:.2f}<extra></extra>"))
+                safety_chart.update_layout(
+                    template="plotly_dark", height=180, showlegend=False,
+                    margin={"l": 10, "r": 10, "t": 35, "b": 35},
+                    yaxis={"visible": False}, xaxis_title="Underlying price / strike")
+                st.plotly_chart(safety_chart, width="stretch", config={"displaylogo": False})
+        else:
+            st.info("Option-chain validation has not been run for this equity analysis.")
+
+    with st.expander("Historical events and machine-readable details"):
+        history_tabs = st.tabs(["Patterns", "Structure", "Zones", "Raw setup"])
+        with history_tabs[0]:
+            st.json(price_action.get("pattern_history") or [], expanded=False)
+        with history_tabs[1]:
+            st.json((price_action.get("market_structure") or {}).get("events") or [], expanded=False)
+        with history_tabs[2]:
+            st.json(price_action.get("zones") or [], expanded=False)
+        with history_tabs[3]:
+            st.json(price_action, expanded=False)
+
+
 def render_analysis_workspace(platform: TradingPlatform, result: dict[str, Any]) -> None:
     symbol = str(result.get("symbol", "UNKNOWN"))
     analysis, decision = result.get("analysis") or {}, result.get("decision") or {}
@@ -2240,16 +2521,10 @@ def render_analysis_workspace(platform: TradingPlatform, result: dict[str, Any])
                 st.subheader(label)
                 st.json(payload or {}, expanded=True)
     with tabs[2]:
-        from src.report.price_action_report import build_price_action_report
-        report = build_price_action_report(price_action)
         if not price_action:
             st.info("Rich price-action analysis is unavailable for this saved result.")
         else:
-            for section, payload in report.items():
-                if section != "chart_overlays":
-                    with st.expander(section, expanded=section in (
-                            "Market Structure", "Nearest Support and Resistance", "Entry Alternatives")):
-                        st.json(payload, expanded=False)
+            render_price_action_workspace(price_action, result)
     with tabs[3]:
         st.json(result.get("setup_evaluation") or {}, expanded=True)
         st.json(result.get("market_quality") or {}, expanded=False)

@@ -38,6 +38,8 @@ class TechnicalOptionValidator:
         if invalidation is not None and strike_safety / max(spot, 1e-12) * 100 < .5:
             warnings.append("STRIKE_TOO_CLOSE_TO_TECHNICAL_INVALIDATION")
         return {"approved": approved, "nearest_support": support["midpoint"] if support else None,
+                "spot_price": spot, "suggested_strike": strike,
+                "technical_invalidation": invalidation,
                 "nearest_resistance": resistance["midpoint"] if resistance else None,
                 "support_strength": support["strength_score"] if support else None,
                 "resistance_strength": resistance["strength_score"] if resistance else None,
