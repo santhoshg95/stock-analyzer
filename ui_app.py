@@ -536,6 +536,10 @@ def candidate_rows(report: dict[str, Any], execution_marks: dict[str, str] | Non
     for trade in [*report.get("trades", []), *report.get("watchlist", [])]:
         event = trade.get("event_risk", {})
         stability = trade.get("selection_stability") or {}
+        zones = trade.get("supply_demand") or {}
+        demand = zones.get("nearest_demand") or {}
+        supply = zones.get("nearest_supply") or {}
+        recovery = trade.get("intraday_recovery") or {}
         rows.append({
             "Symbol": trade.get("symbol"), "Status": trade.get("status"),
             "Entry status": trade.get("selection_status", "UNAVAILABLE"),
@@ -553,6 +557,14 @@ def candidate_rows(report: dict[str, Any], execution_marks: dict[str, str] | Non
             "R:R": trade.get("levels", {}).get("risk_reward"),
             "Support": trade.get("levels", {}).get("support"),
             "Resistance": trade.get("levels", {}).get("resistance"),
+            "Demand zone": (
+                f"{demand.get('lower')}–{demand.get('upper')}" if demand else "UNAVAILABLE"
+            ),
+            "Supply zone": (
+                f"{supply.get('lower')}–{supply.get('upper')}" if supply else "UNAVAILABLE"
+            ),
+            "15m recovery": recovery.get("state", "NOT_REQUIRED"),
+            "Recovery score": recovery.get("score"),
             "Relative strength": trade.get("relative_strength", {}).get("score"),
             "RS status": trade.get("relative_strength", {}).get("status"),
             "Stay above adverse barrier": trade.get("adverse_move_risk", {}).get(
@@ -735,11 +747,14 @@ def decision_checks(trade: dict[str, Any]) -> list[dict[str, Any]]:
     eligibility = trade.get("trade_eligibility") or {}
     confirmation = trade.get("entry_confirmation") or {}
     risk = trade.get("risk") or trade.get("position_size") or {}
+    recovery = trade.get("intraday_recovery") or {}
     return [
         {"label": "Policy permits execution",
          "passed": bool(eligibility.get("eligible", trade.get("status") == "TRADE"))},
         {"label": "Entry confirmation is complete",
          "passed": bool(confirmation.get("passed", trade.get("selection_status") == "BUY NOW"))},
+        {"label": "Sharp-fall recovery is confirmed or not required",
+         "passed": not recovery.get("required") or bool(recovery.get("confirmed"))},
         {"label": "News evidence is complete",
          "passed": news.get("news_state") in {"ANALYZED", "NO_RELEVANT_NEWS"}},
         {"label": "No hard event-risk block",
