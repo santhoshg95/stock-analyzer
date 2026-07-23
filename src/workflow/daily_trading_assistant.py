@@ -1466,9 +1466,11 @@ class DailyTradingAssistant:
         # technical, market, liquidity, risk, and execution gates. A three-name
         # buffer allows bearish material news to remove a finalist.
         news_started = perf_counter()
-        news_target_symbols = [
+        news_target_symbols = ([
             trade["symbol"] for trade in preliminary if trade["status"] != "REJECTED"
         ][:min(len(preliminary), limit + 3)]
+                               if self.platform.settings.market_data_source == "kite"
+                               else [])
         news_by_symbol: dict[str, dict[str, Any]] = {}
         results: list[dict[str, Any]] = []
         if self.platform.settings.market_data_source == "kite" and news_target_symbols:

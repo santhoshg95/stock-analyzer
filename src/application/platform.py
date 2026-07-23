@@ -434,6 +434,8 @@ class TradingPlatform:
         supply_demand = SupplyDemandEngine.analyze(
             daily_for_zones, current_price=report["analysis"].current_price
         )
+        price_action = report.get("price_action") or {
+            "status": "INSUFFICIENT_DATA", "rejection_reasons": ["HISTORICAL_DATA_UNAVAILABLE"]}
         intraday = pd.DataFrame()
         if len(daily_for_zones) >= 2:
             previous_close = float(daily_for_zones.iloc[-2]["Close"])
@@ -483,6 +485,7 @@ class TradingPlatform:
             "setup_evaluation": report["setup_evaluation"],
             "market_quality": report["market_quality"],
             "supply_demand": supply_demand,
+            "price_action": price_action,
             "intraday_recovery": intraday_recovery,
             "decision": report["decision"],
             "trade_plan": trade_plan,
@@ -507,8 +510,23 @@ class TradingPlatform:
             ) from exc
         if dataframe is None or dataframe.empty:
             raise DataUnavailableError(f"No historical data is available for {symbol}")
-        trades = Backtester.run(IndicatorPipeline.run(dataframe.copy()))
-        return {"symbol": symbol, "metrics": Metrics.summarize(trades), "trades": self._serialize(trades)}
+        prepared = IndicatorPipeline.run(dataframe.copy())
+        trades = Backtester.run(prepared)
+        from src.backtesting.setup_backtester import SetupBacktester
+        from src.analysis.price_action_engine import PriceActionEngine
+
+        def setup_signals(prefix):
+            analysis = PriceActionEngine().analyze(prefix)
+            return [{**entry, "confirmation_timestamp": entry["signal_timestamp"]}
+                    for entry in analysis.get("entries", [])
+                    if entry.get("signal_timestamp") == prefix.index[-1]]
+
+        setup_backtest = SetupBacktester(
+            self.settings.__dict__.get("backtest_slippage_bps", 5),
+            self.settings.__dict__.get("backtest_transaction_cost_bps", 10),
+        ).run(prepared, setup_signals)
+        return {"symbol": symbol, "metrics": Metrics.summarize(trades),
+                "trades": self._serialize(trades), "setup_backtest": self._serialize(setup_backtest)}
 
     def _universe_symbols(self) -> list[str]:
         """Use Kite's current F&O universe, or cached files in explicit offline mode."""
@@ -653,6 +671,7 @@ class TradingPlatform:
                     "breakout": report["breakout"], "candlestick": report["candlestick"],
                     "setup_evaluation": report["setup_evaluation"],
                     "supply_demand": report.get("supply_demand", {}),
+                    "price_action": report.get("price_action", {}),
                     "intraday_recovery": report.get("intraday_recovery", {}),
                 },
                 "position_size": report["position_size"],
@@ -861,7 +880,11 @@ class TradingPlatform:
                 "code": "OPTION_STRUCTURE_UNAVAILABLE", "category": "STRUCTURE",
                 "reason": trade["reason"],
             })
-            validation = OptionEntryValidator.validate(chain, trade, direction, self.settings)
+            technical = ((candidate.get("analysis_report") or {}).get("price_action")
+                         or candidate.get("price_action"))
+            event_risk = bool((candidate.get("event_risk") or {}).get("active"))
+            validation = OptionEntryValidator.validate(
+                chain, trade, direction, self.settings, technical=technical, event_risk=event_risk)
             rejection = trade.get("rejection")
             if trade.get("available") and not validation["approved"]:
                 rejection = {"code": "ENTRY_VALIDATION_FAILED", "category": "EXECUTION",

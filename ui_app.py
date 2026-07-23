@@ -1050,6 +1050,37 @@ def price_figure(frame: pd.DataFrame, symbol: str, levels: dict[str, Any] | None
         if price is not None:
             figure.add_hline(y=float(price), line_dash="dot", line_color=color,
                              annotation_text=label, row=1, col=1)
+    if (levels or {}).get("show_price_action_overlays", True):
+        for zone in (levels or {}).get("zones", []):
+            color = "#34d399" if zone.get("type") == "SUPPORT" else "#fb7185"
+            figure.add_hrect(y0=float(zone["lower"]), y1=float(zone["upper"]),
+                             fillcolor=color, opacity=.10, line_width=0, row=1, col=1)
+        swings = (levels or {}).get("swings", [])
+        if swings:
+            figure.add_trace(go.Scatter(
+                x=[s["timestamp"] for s in swings], y=[s["price"] for s in swings],
+                mode="markers+text", text=[s.get("label", s.get("type", "")) for s in swings],
+                textposition="top center", marker={"size": 8, "color": "#fbbf24"},
+                name="Confirmed swings"), row=1, col=1)
+        for name, event, color in (
+                ("Breakout", (levels or {}).get("breakout"), "#22d3ee"),
+                ("Retest", (levels or {}).get("retest"), "#a78bfa"),
+                ("Confirmation", (levels or {}).get("confirmation"), "#34d399")):
+            if event and event.get("timestamp") is not None and event.get("price") is not None:
+                figure.add_trace(go.Scatter(
+                    x=[event["timestamp"]], y=[event["price"]], mode="markers+text",
+                    text=[name], textposition="bottom center",
+                    marker={"size": 11, "color": color, "symbol": "diamond"}, name=name), row=1, col=1)
+        pattern = (levels or {}).get("pattern")
+        if pattern:
+            figure.add_trace(go.Scatter(
+                x=[pattern.get("timestamp")], y=[pattern.get("price")],
+                mode="markers+text", text=[pattern.get("name", "Pattern")],
+                textposition="top center", marker={"size": 10, "color": "#f472b6", "symbol": "star"},
+                name="Pattern"), row=1, col=1)
+        for index, target in enumerate((levels or {}).get("price_action_targets", []), 1):
+            figure.add_hline(y=float(target), line_dash="dash", line_color="#34d399",
+                             opacity=.55, annotation_text=f"PA target {index}", row=1, col=1)
     if show_volume and "Volume" in data:
         colors = ["#34d399" if close >= opened else "#fb7185"
                   for close, opened in zip(data["Close"], data["Open"])]
@@ -1074,7 +1105,7 @@ def render_price_chart(platform: TradingPlatform, symbol: str,
         if frame is None or frame.empty or not {"Open", "High", "Low", "Close"}.issubset(frame.columns):
             st.info("Price history is unavailable for this chart.")
             return
-        controls = st.columns([1, 2, 1, 1, 1])
+        controls = st.columns([1, 2, 1, 1, 1, 1])
         period = controls[0].selectbox("Chart period", ("3M", "6M", "1Y", "ALL"), index=1,
                                        key=f"chart-period-{symbol}")
         averages = tuple(controls[1].multiselect("Moving averages", (20, 50, 200), default=(20, 50),
@@ -1082,9 +1113,13 @@ def render_price_chart(platform: TradingPlatform, symbol: str,
         show_volume = controls[2].toggle("Volume", value=True, key=f"chart-volume-{symbol}")
         show_rsi = controls[3].toggle("RSI", value=True, key=f"chart-rsi-{symbol}")
         compare_index = controls[4].toggle("vs Nifty", value=False, key=f"chart-index-{symbol}")
+        show_price_action = controls[5].toggle("Price action", value=True,
+                                               key=f"chart-price-action-{symbol}")
         length = {"3M": 65, "6M": 130, "1Y": 260, "ALL": len(frame)}[period]
         visible = frame.tail(length)
-        st.plotly_chart(price_figure(visible, symbol, levels, averages, show_volume, show_rsi), width="stretch",
+        chart_levels = dict(levels or {})
+        chart_levels["show_price_action_overlays"] = show_price_action
+        st.plotly_chart(price_figure(visible, symbol, chart_levels, averages, show_volume, show_rsi), width="stretch",
                         config={"displaylogo": False, "scrollZoom": True,
                                 "toImageButtonOptions": {"filename": f"{symbol}-chart", "scale": 2}})
         if compare_index:
@@ -2137,11 +2172,47 @@ def render_analysis_workspace(platform: TradingPlatform, result: dict[str, Any])
     symbol = str(result.get("symbol", "UNKNOWN"))
     analysis, decision = result.get("analysis") or {}, result.get("decision") or {}
     entry, plan = result.get("entry") or {}, result.get("trade_plan") or {}
+    price_action = (result.get("price_action")
+                    or analysis.get("price_action")
+                    or (analysis.get("metadata") or {}).get("price_action")
+                    or ((result.get("technical") or {}).get("metadata") or {}).get("price_action")
+                    or {})
+    active_entry = (price_action.get("entries") or [{}])[0]
+    active_pattern = (price_action.get("patterns") or [{}])[0]
     levels = {
-        "entry": plan.get("entry", entry.get("entry_price", entry.get("entry"))),
-        "stop_loss": plan.get("stop_loss", entry.get("stop_loss")),
-        "target_1": plan.get("target", plan.get("target_1", entry.get("target"))),
+        "entry": plan.get("entry", entry.get("entry_price", entry.get("entry",
+                 active_entry.get("entry_price")))),
+        "stop_loss": plan.get("stop_loss", entry.get("stop_loss", active_entry.get("stop_loss"))),
+        "target_1": plan.get("target", plan.get("target_1", entry.get("target",
+                    (active_entry.get("targets") or [None])[0]))),
         "support": analysis.get("support"), "resistance": analysis.get("resistance"),
+        "zones": price_action.get("zones", []),
+        "swings": [
+            {**pivot, "label": next((
+                event["event_type"] for event in price_action.get("market_structure", {}).get("events", [])
+                if event.get("timestamp") == pivot.get("timestamp")
+                and event.get("event_type") in ("HH", "HL", "LH", "LL")), pivot.get("type", ""))}
+            for pivot in price_action.get("market_structure", {}).get("confirmed_pivots", [])
+        ],
+        "breakout": ({
+            "timestamp": price_action["breakout"].get("breakout_candle"),
+            "price": price_action["breakout"].get("breakout_price")}
+            if price_action.get("breakout") else None),
+        "retest": ({
+            "timestamp": price_action["retest"].get("retest_timestamp"),
+            "price": price_action["retest"].get("entry_price")
+                     or price_action["breakout"].get("breakout_price")}
+            if price_action.get("retest") else None),
+        "confirmation": ({
+            "timestamp": price_action["retest"].get("confirmation_timestamp"),
+            "price": price_action["retest"].get("entry_price")}
+            if price_action.get("retest") and price_action["retest"].get("confirmation_timestamp") else None),
+        "pattern": ({
+            "timestamp": (active_pattern.get("candle_indexes") or [None])[-1],
+            "price": active_pattern.get("confirmation_price"),
+            "name": active_pattern.get("pattern")}
+            if active_pattern else None),
+        "price_action_targets": active_entry.get("targets", []),
     }
     verdict = decision.get("action") or decision.get("decision") or decision.get("signal") or "ANALYZED"
     hero(symbol, str(decision.get("reason") or "Technical research result"), [verdict])
@@ -2152,7 +2223,7 @@ def render_analysis_workspace(platform: TradingPlatform, result: dict[str, Any])
         ("Position size", number((result.get("position_size") or {}).get("quantity"), 0)),
     ])
     render_price_chart(platform, symbol, levels)
-    tabs = st.tabs(["Verdict & risk", "Technical evidence", "Setup", "Raw analysis"])
+    tabs = st.tabs(["Verdict & risk", "Technical evidence", "Price action", "Setup", "Raw analysis"])
     with tabs[0]:
         left, right = st.columns(2)
         with left.container(border=True):
@@ -2169,9 +2240,20 @@ def render_analysis_workspace(platform: TradingPlatform, result: dict[str, Any])
                 st.subheader(label)
                 st.json(payload or {}, expanded=True)
     with tabs[2]:
+        from src.report.price_action_report import build_price_action_report
+        report = build_price_action_report(price_action)
+        if not price_action:
+            st.info("Rich price-action analysis is unavailable for this saved result.")
+        else:
+            for section, payload in report.items():
+                if section != "chart_overlays":
+                    with st.expander(section, expanded=section in (
+                            "Market Structure", "Nearest Support and Resistance", "Entry Alternatives")):
+                        st.json(payload, expanded=False)
+    with tabs[3]:
         st.json(result.get("setup_evaluation") or {}, expanded=True)
         st.json(result.get("market_quality") or {}, expanded=False)
-    with tabs[3]:
+    with tabs[4]:
         st.json(result, expanded=False)
 
 
